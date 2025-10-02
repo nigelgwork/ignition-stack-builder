@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,7 +7,9 @@ import json
 import yaml
 import io
 import zipfile
+import base64
 from pathlib import Path
+from docker_hub import get_ignition_versions, get_postgres_versions, get_docker_tags
 
 app = FastAPI(title="IIoT Stack Builder API")
 
@@ -49,6 +51,60 @@ def read_root():
 def get_catalog():
     """Get the application catalog"""
     return load_catalog()
+
+@app.get("/versions/{app_id}")
+def get_versions(app_id: str):
+    """Get available versions for a specific application from Docker Hub"""
+    try:
+        if app_id == "ignition":
+            versions = get_ignition_versions()
+        elif app_id == "postgres":
+            versions = get_postgres_versions()
+        else:
+            # For other apps, try to fetch from catalog and Docker Hub
+            catalog = load_catalog()
+            app = next((a for a in catalog["applications"] if a["id"] == app_id), None)
+            if app and "image" in app:
+                versions = get_docker_tags(app["image"], limit=50)
+                if not versions:
+                    # Fallback to catalog versions if API fails
+                    versions = app.get("available_versions", ["latest"])
+            else:
+                return {"versions": ["latest"]}
+
+        return {"versions": versions}
+    except Exception as e:
+        print(f"Error fetching versions for {app_id}: {e}")
+        # Fallback to catalog versions
+        catalog = load_catalog()
+        app = next((a for a in catalog["applications"] if a["id"] == app_id), None)
+        if app:
+            return {"versions": app.get("available_versions", ["latest"])}
+        return {"versions": ["latest"]}
+
+@app.post("/upload-module")
+async def upload_module(file: UploadFile = File(...)):
+    """
+    Upload a 3rd party Ignition module file (.modl)
+    Returns base64 encoded file content that can be included in the stack
+    """
+    try:
+        if not file.filename.endswith('.modl'):
+            raise HTTPException(status_code=400, detail="Only .modl files are allowed")
+
+        # Read file content
+        content = await file.read()
+
+        # Encode as base64 for storage/transfer
+        encoded = base64.b64encode(content).decode('utf-8')
+
+        return {
+            "filename": file.filename,
+            "size": len(content),
+            "encoded": encoded
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate")
 def generate_stack(stack_config: StackConfig):
@@ -383,6 +439,22 @@ def download_stack(stack_config: StackConfig):
             # Create directory structure placeholders
             zip_file.writestr("configs/.gitkeep", "")
             zip_file.writestr("scripts/.gitkeep", "")
+
+            # Add uploaded module files for Ignition instances
+            for instance in stack_config.instances:
+                if instance.app_id == "ignition":
+                    uploaded_modules = instance.config.get("uploaded_modules", [])
+                    if uploaded_modules:
+                        for module in uploaded_modules:
+                            # Decode base64 module file and add to zip
+                            filename = module.get("filename", "module.modl")
+                            encoded_content = module.get("encoded", "")
+                            if encoded_content:
+                                try:
+                                    content = base64.b64decode(encoded_content)
+                                    zip_file.writestr(f"modules/{instance.instance_name}/{filename}", content)
+                                except Exception as e:
+                                    print(f"Error decoding module {filename}: {e}")
 
         zip_buffer.seek(0)
 

@@ -92,6 +92,63 @@ function App() {
     setSelectedInstances(newInstances)
   }
 
+  const handleFileUpload = async (instanceId, files) => {
+    if (!files || files.length === 0) return
+
+    const uploadedModules = []
+
+    for (const file of files) {
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const response = await axios.post(`${API_URL}/upload-module`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        })
+
+        uploadedModules.push(response.data)
+      } catch (error) {
+        console.error(`Error uploading ${file.name}:`, error)
+        alert(`Failed to upload ${file.name}: ${error.response?.data?.detail || error.message}`)
+      }
+    }
+
+    // Update instance config with uploaded modules
+    const newInstances = selectedInstances.map(inst => {
+      if (inst.instanceId === instanceId) {
+        const existingModules = inst.config.uploaded_modules || []
+        return {
+          ...inst,
+          config: {
+            ...inst.config,
+            uploaded_modules: [...existingModules, ...uploadedModules]
+          }
+        }
+      }
+      return inst
+    })
+    setSelectedInstances(newInstances)
+  }
+
+  const removeUploadedModule = (instanceId, filename) => {
+    const newInstances = selectedInstances.map(inst => {
+      if (inst.instanceId === instanceId) {
+        const modules = inst.config.uploaded_modules || []
+        return {
+          ...inst,
+          config: {
+            ...inst.config,
+            uploaded_modules: modules.filter(m => m.filename !== filename)
+          }
+        }
+      }
+      return inst
+    })
+    setSelectedInstances(newInstances)
+  }
+
   const toggleSingleApp = (app) => {
     const exists = selectedInstances.find(inst => inst.app_id === app.id)
     if (exists) {
@@ -191,6 +248,37 @@ function App() {
         )
 
       case 'textarea':
+        // Special handling for 3rd party modules - use file upload instead
+        if (key === 'third_party_modules') {
+          const uploadedModules = instance.config.uploaded_modules || []
+          return (
+            <div className="file-upload-container">
+              <input
+                type="file"
+                accept=".modl"
+                multiple
+                onChange={(e) => handleFileUpload(instance.instanceId, Array.from(e.target.files))}
+                className="file-input"
+              />
+              <div className="uploaded-files-list">
+                {uploadedModules.map((module, idx) => (
+                  <div key={idx} className="uploaded-file-item">
+                    <span className="file-name">{module.filename}</span>
+                    <span className="file-size">({(module.size / 1024).toFixed(1)} KB)</span>
+                    <button
+                      className="remove-file-btn"
+                      onClick={() => removeUploadedModule(instance.instanceId, module.filename)}
+                      type="button"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="upload-hint">Upload .modl files for 3rd party modules</p>
+            </div>
+          )
+        }
         return (
           <textarea
             value={value || option.default || ''}
@@ -413,27 +501,65 @@ function App() {
                           </div>
 
                           {/* Inline Instance Configurations */}
-                          {instances.map((instance) => (
-                            <div key={instance.instanceId} className="instance-config inline-config">
-                              <div className="instance-header">
-                                <h3>{app.name} - {instance.config.name || instance.instance_name}</h3>
-                                <button
-                                  className="remove-instance-btn"
-                                  onClick={() => removeInstance(instance.instanceId)}
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                              <div className="config-grid">
-                                {app.configurable_options && Object.entries(app.configurable_options).map(([key, option]) => (
-                                  <div key={key} className="config-row">
-                                    <label>{option.label}:</label>
-                                    {renderConfigInput(instance, key, option, app)}
+                          {instances.map((instance) => {
+                            // For Ignition, separate configs into left and right columns
+                            const isIgnition = app.id === 'ignition'
+                            const leftColumnKeys = ['name', 'version', 'http_port', 'https_port', 'admin_username', 'admin_password', 'edition', 'memory_max', 'memory_init', 'commissioning_allow_non_secure', 'quick_start']
+                            const rightColumnKeys = ['modules', 'third_party_modules']
+
+                            return (
+                              <div key={instance.instanceId} className="instance-config inline-config">
+                                <div className="instance-header">
+                                  <h3>{app.name} - {instance.config.name || instance.instance_name}</h3>
+                                  <button
+                                    className="remove-instance-btn"
+                                    onClick={() => removeInstance(instance.instanceId)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+
+                                {isIgnition ? (
+                                  <div className="config-two-columns">
+                                    {/* Left Column - Basic Configuration */}
+                                    <div className="config-column-left">
+                                      <h4 className="column-heading">Basic Configuration</h4>
+                                      {app.configurable_options && Object.entries(app.configurable_options)
+                                        .filter(([key]) => leftColumnKeys.includes(key))
+                                        .map(([key, option]) => (
+                                          <div key={key} className="config-row">
+                                            <label>{option.label}:</label>
+                                            {renderConfigInput(instance, key, option, app)}
+                                          </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Right Column - Modules */}
+                                    <div className="config-column-right">
+                                      <h4 className="column-heading">Module Configuration</h4>
+                                      {app.configurable_options && Object.entries(app.configurable_options)
+                                        .filter(([key]) => rightColumnKeys.includes(key))
+                                        .map(([key, option]) => (
+                                          <div key={key} className="config-row-full">
+                                            <label>{option.label}:</label>
+                                            {renderConfigInput(instance, key, option, app)}
+                                          </div>
+                                        ))}
+                                    </div>
                                   </div>
-                                ))}
+                                ) : (
+                                  <div className="config-grid">
+                                    {app.configurable_options && Object.entries(app.configurable_options).map(([key, option]) => (
+                                      <div key={key} className="config-row">
+                                        <label>{option.label}:</label>
+                                        {renderConfigInput(instance, key, option, app)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       )
                     })}

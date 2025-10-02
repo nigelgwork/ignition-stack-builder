@@ -8,7 +8,8 @@
       "Bash(curl:*)",
       "Bash(python3:*)",
       "WebSearch",
-      "WebFetch(domain:hub.docker.com)"
+      "WebFetch(domain:hub.docker.com)",
+      "Bash(docker images:*)"
     ],
     "deny": [],
     "ask": []
