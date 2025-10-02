@@ -9,7 +9,16 @@
       "Bash(python3:*)",
       "WebSearch",
       "WebFetch(domain:hub.docker.com)",
-      "Bash(docker images:*)"
+      "Bash(docker images:*)",
+      "Bash(unzip:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(sudo rm:*)",
+      "Bash(cat:*)",
+      "Bash(chmod:*)",
+      "Bash(./start.sh:*)",
+      "Bash(docker restart:*)",
+      "Bash(docker exec:*)"
     ],
     "deny": [],
     "ask": []

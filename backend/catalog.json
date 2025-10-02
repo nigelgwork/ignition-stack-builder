@@ -22,37 +22,128 @@
         "volumes": ["./configs/{instance_name}/data:/usr/local/bin/ignition/data"]
       },
       "configurable_options": {
-        "name": {"type": "text", "default": "ignition-1", "label": "Instance Name"},
-        "version": {"type": "select", "default": "latest", "label": "Version"},
-        "http_port": {"type": "number", "default": 8088, "label": "HTTP Port"},
-        "https_port": {"type": "number", "default": 8043, "label": "HTTPS Port"},
-        "admin_username": {"type": "text", "default": "admin", "label": "Admin Username"},
-        "admin_password": {"type": "password", "default": "password", "label": "Admin Password"},
-        "edition": {"type": "select", "default": "standard", "label": "Edition", "options": ["standard", "edge", "maker"]},
-        "modules": {
+        "name": {
+          "type": "text",
+          "default": "ignition-gateway",
+          "label": "Instance Name",
+          "description": "Unique name for this Ignition instance"
+        },
+        "version": {
+          "type": "select",
+          "default": "latest",
+          "label": "Version",
+          "description": "Ignition version - 8.3.x includes new Historian and Event Streams modules"
+        },
+        "http_port": {
+          "type": "number",
+          "default": 8088,
+          "label": "HTTP Port",
+          "description": "Port for HTTP access to the Gateway (default: 8088)"
+        },
+        "https_port": {
+          "type": "number",
+          "default": 8043,
+          "label": "HTTPS Port",
+          "description": "Port for HTTPS/secure access to the Gateway (default: 8043)"
+        },
+        "admin_username": {
+          "type": "text",
+          "default": "admin",
+          "label": "Admin Username",
+          "description": "Gateway administrator username for initial login"
+        },
+        "admin_password": {
+          "type": "password",
+          "default": "password",
+          "label": "Admin Password",
+          "description": "Gateway administrator password - change from default for security"
+        },
+        "edition": {
+          "type": "select",
+          "default": "standard",
+          "label": "Edition",
+          "options": ["standard", "edge", "maker"],
+          "description": "Ignition edition: Standard (full features), Edge (lightweight for field devices), Maker (free for non-commercial use)"
+        },
+        "modules_81": {
           "type": "multiselect",
-          "default": ["perspective", "vision", "tag-historian", "sql-bridge", "alarm-notification", "opc-ua", "reporting"],
-          "label": "Modules",
+          "default": [],
+          "label": "Modules (v8.1)",
+          "version_constraint": "8.1",
+          "description": "Built-in modules for Ignition 8.1",
           "options": [
-            "perspective",
-            "vision",
-            "tag-historian",
-            "sql-bridge",
-            "alarm-notification",
-            "opc-ua",
-            "sfc",
-            "reporting",
-            "symbol-factory",
-            "enterprise-administration",
-            "sms-notification",
-            "voice-notification"
+            {"value": "perspective", "label": "Perspective", "description": "Modern web-based HMI/SCADA"},
+            {"value": "vision", "label": "Vision", "description": "Traditional Java-based HMI/SCADA"},
+            {"value": "tag-historian", "label": "Tag Historian", "description": "Historical data logging and analysis"},
+            {"value": "sql-bridge", "label": "SQL Bridge", "description": "Database connectivity and transaction groups"},
+            {"value": "alarm-notification", "label": "Alarm Notification", "description": "Alarm management and notification pipelines"},
+            {"value": "opc-ua", "label": "OPC-UA", "description": "OPC-UA server and driver connectivity"},
+            {"value": "sfc", "label": "SFC", "description": "Sequential Function Charts for procedural automation"},
+            {"value": "reporting", "label": "Reporting", "description": "Report generation and scheduling"},
+            {"value": "symbol-factory", "label": "Symbol Factory", "description": "Industrial graphics library"},
+            {"value": "enterprise-administration", "label": "Enterprise Administration", "description": "Multi-gateway management and EAM"},
+            {"value": "sms-notification", "label": "SMS Notification", "description": "SMS/text message notifications via Twilio"},
+            {"value": "voice-notification", "label": "Voice Notification", "description": "Voice call notifications via Twilio"},
+            {"value": "webdev", "label": "WebDev", "description": "Web development module for custom web pages"},
+            {"value": "serial-support-client", "label": "Serial Support Client", "description": "Serial/COM port communication (client)"},
+            {"value": "serial-support-gateway", "label": "Serial Support Gateway", "description": "Serial/COM port communication (gateway)"}
           ]
         },
-        "third_party_modules": {"type": "textarea", "default": "", "label": "3rd Party Module URLs (one per line)", "placeholder": "https://example.com/module.modl"},
-        "commissioning_allow_non_secure": {"type": "checkbox", "default": true, "label": "Allow Non-Secure Commissioning"},
-        "quick_start": {"type": "checkbox", "default": true, "label": "Enable Quick Start"},
-        "memory_max": {"type": "text", "default": "2048m", "label": "JVM Max Memory (e.g., 2048m, 4g)"},
-        "memory_init": {"type": "text", "default": "512m", "label": "JVM Initial Memory (e.g., 512m, 1g)"}
+        "modules_83": {
+          "type": "multiselect",
+          "default": [],
+          "label": "Modules (v8.3+)",
+          "version_constraint": "8.3",
+          "description": "Built-in modules for Ignition 8.3 and later",
+          "options": [
+            {"value": "perspective", "label": "Perspective", "description": "Modern web-based HMI/SCADA with enhanced drawing tools"},
+            {"value": "vision", "label": "Vision", "description": "Traditional Java-based HMI/SCADA"},
+            {"value": "historian-core", "label": "Historian Core", "description": "High-performance data logging with internal QuestDB historian"},
+            {"value": "sql-historian", "label": "SQL Historian", "description": "Historical data logging to external SQL databases"},
+            {"value": "sql-bridge", "label": "SQL Bridge", "description": "Database connectivity and transaction groups"},
+            {"value": "alarm-notification", "label": "Alarm Notification", "description": "Alarm management and notification pipelines"},
+            {"value": "opc-ua", "label": "OPC-UA", "description": "OPC-UA server and driver connectivity"},
+            {"value": "sfc", "label": "SFC", "description": "Sequential Function Charts for procedural automation"},
+            {"value": "reporting", "label": "Reporting", "description": "Report generation and scheduling"},
+            {"value": "symbol-factory", "label": "Symbol Factory", "description": "Industrial graphics library"},
+            {"value": "enterprise-administration", "label": "Enterprise Administration", "description": "Multi-gateway management and EAM"},
+            {"value": "sms-notification", "label": "SMS Notification", "description": "SMS/text message notifications"},
+            {"value": "voice-notification", "label": "Voice Notification", "description": "Voice and WhatsApp notifications via Twilio"},
+            {"value": "event-streams", "label": "Event Streams", "description": "Event-driven data pipelines and Kafka integration"},
+            {"value": "webdev", "label": "WebDev", "description": "Web development module for custom web pages"}
+          ]
+        },
+        "third_party_modules": {
+          "type": "textarea",
+          "default": "",
+          "label": "3rd Party Module URLs (one per line)",
+          "placeholder": "https://example.com/module.modl",
+          "description": "URLs to third-party .modl files for automatic installation"
+        },
+        "commissioning_allow_non_secure": {
+          "type": "checkbox",
+          "default": false,
+          "label": "Allow Non-Secure Commissioning",
+          "description": "Allow devices to commission over non-secure HTTP (disable in production)"
+        },
+        "quick_start": {
+          "type": "checkbox",
+          "default": false,
+          "label": "Enable Quick Start",
+          "description": "Skip manual commissioning (WARNING: Not recommended with volume persistence)"
+        },
+        "memory_max": {
+          "type": "text",
+          "default": "2048m",
+          "label": "JVM Max Memory",
+          "description": "Maximum JVM heap size (e.g., 2048m, 4g) - increase for large projects"
+        },
+        "memory_init": {
+          "type": "text",
+          "default": "512m",
+          "label": "JVM Initial Memory",
+          "description": "Initial JVM heap size (e.g., 512m, 1g) - set to same as max for consistent performance"
+        }
       },
       "integrations": ["db_client", "mqtt_client", "oauth_client"],
       "enabled": true

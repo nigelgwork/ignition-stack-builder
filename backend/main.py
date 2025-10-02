@@ -134,6 +134,9 @@ def generate_stack(stack_config: StackConfig):
         env_vars.append(f"RESTART_POLICY={global_settings.restart_policy}")
         env_vars.append("")
 
+        # Check if Traefik is in the stack
+        has_traefik = any(inst.app_id == "traefik" for inst in stack_config.instances)
+
         # Process each instance
         for instance in stack_config.instances:
             app = catalog_dict.get(instance.app_id)
@@ -216,12 +219,29 @@ def generate_stack(stack_config: StackConfig):
                     env["GATEWAY_ADMIN_PASSWORD"] = config.get("admin_password", env.get("GATEWAY_ADMIN_PASSWORD"))
                     env["IGNITION_EDITION"] = config.get("edition", env.get("IGNITION_EDITION", "standard"))
 
+                    # Determine version to decide which modules field to use
+                    version = config.get("version", "latest")
+                    is_83_or_later = False
+                    # "latest" maps to 8.3+, so treat it as 8.3
+                    if version == "latest" or (version.startswith("8.3") or version.startswith("8.4") or version.startswith("9")):
+                        is_83_or_later = True
+
                     # Handle modules - convert array to comma-separated string
-                    modules = config.get("modules", ["perspective", "vision", "tag-historian", "sql-bridge", "alarm-notification", "opc-ua", "reporting"])
-                    if isinstance(modules, list):
-                        env["GATEWAY_MODULES_ENABLED"] = ",".join(modules)
+                    # Check for version-specific module fields first, then fall back to legacy "modules" field
+                    if is_83_or_later:
+                        modules = config.get("modules_83", config.get("modules", []))
                     else:
-                        env["GATEWAY_MODULES_ENABLED"] = str(modules)
+                        modules = config.get("modules_81", config.get("modules", []))
+
+                    if isinstance(modules, list) and len(modules) > 0:
+                        # Extract just the values if modules are objects
+                        module_values = []
+                        for mod in modules:
+                            if isinstance(mod, dict):
+                                module_values.append(mod.get("value", mod))
+                            else:
+                                module_values.append(mod)
+                        env["GATEWAY_MODULES_ENABLED"] = ",".join(module_values)
 
                     # Handle third party modules
                     third_party_modules = config.get("third_party_modules", "")
@@ -234,12 +254,12 @@ def generate_stack(stack_config: StackConfig):
                     env["IGNITION_MEMORY_MAX"] = config.get("memory_max", env.get("IGNITION_MEMORY_MAX", "2048m"))
                     env["IGNITION_MEMORY_INIT"] = config.get("memory_init", env.get("IGNITION_MEMORY_INIT", "512m"))
 
-                    # Handle commissioning options
-                    if config.get("commissioning_allow_non_secure", True):
+                    # Handle commissioning options - only set if explicitly true
+                    if config.get("commissioning_allow_non_secure", False):
                         env["GATEWAY_SYSTEM_COMMISSIONING_ALLOWINSECURE"] = "true"
 
-                    if config.get("quick_start", True):
-                        env["IGNITION_QUICKSTART"] = "true"
+                    # REMOVED: IGNITION_QUICKSTART causes volume mount issues
+                    # Users should manually commission the gateway after first start
 
                 elif instance.app_id == "keycloak":
                     env["KEYCLOAK_ADMIN"] = config.get("admin_username", env.get("KEYCLOAK_ADMIN"))
@@ -279,6 +299,40 @@ def generate_stack(stack_config: StackConfig):
             if "cap_add" in app["default_config"]:
                 service["cap_add"] = app["default_config"]["cap_add"]
 
+            # Add Traefik labels if Traefik is present and this is a web-accessible service
+            if has_traefik and instance.app_id != "traefik":
+                # Define web services and their default ports
+                web_service_ports = {
+                    "ignition": lambda c: str(c.get("http_port", 8088)),
+                    "grafana": lambda c: str(c.get("port", 3000)),
+                    "nodered": lambda c: str(c.get("port", 1880)),
+                    "n8n": lambda c: str(c.get("port", 5678)),
+                    "keycloak": lambda c: str(c.get("port", 8180)),
+                    "prometheus": lambda c: "9090",
+                    "dozzle": lambda c: "8080",
+                    "portainer": lambda c: "9000",
+                    "guacamole": lambda c: "8080",
+                    "authentik": lambda c: "9000",
+                    "authelia": lambda c: "9091",
+                    "mailhog": lambda c: "8025",
+                    "influxdb": lambda c: "8086",
+                    "chronograf": lambda c: "8888"
+                }
+
+                if instance.app_id in web_service_ports:
+                    # Create subdomain from service name
+                    subdomain = service_name.split('-')[0] if '-' in service_name else service_name
+
+                    # Get the port using the port function
+                    port = web_service_ports[instance.app_id](config)
+
+                    service["labels"] = [
+                        "traefik.enable=true",
+                        f"traefik.http.routers.{service_name}.rule=Host(`{subdomain}.localhost`)",
+                        f"traefik.http.routers.{service_name}.entrypoints=web",
+                        f"traefik.http.services.{service_name}.loadbalancer.server.port={port}"
+                    ]
+
             compose["services"][service_name] = service
 
             # Add to env file
@@ -296,6 +350,32 @@ def generate_stack(stack_config: StackConfig):
         env_content = "\n".join(env_vars)
 
         # Create README
+        has_ignition_service = any(inst.app_id == "ignition" for inst in stack_config.instances)
+
+        startup_instructions = """4. Start the stack:
+   ```bash
+   docker-compose up -d
+   ```"""
+
+        if has_ignition_service:
+            startup_instructions = """4. Start the stack using the initialization script:
+
+   **Linux/Mac:**
+   ```bash
+   chmod +x start.sh
+   ./start.sh
+   ```
+
+   **Windows:**
+   ```cmd
+   start.bat
+   ```
+
+   The script automatically handles Ignition volume initialization on first run.
+
+   **Note:** For Ignition stacks, use `start.sh`/`start.bat` instead of `docker-compose up -d` directly.
+   This ensures data volumes are properly initialized on first startup."""
+
         readme_content = f"""# IIoT Stack - Generated Configuration
 
 ## Global Settings
@@ -313,10 +393,7 @@ def generate_stack(stack_config: StackConfig):
    ```bash
    mkdir -p configs
    ```
-4. Start the stack:
-   ```bash
-   docker-compose up -d
-   ```
+{startup_instructions}
 
 ## Service URLs
 """
@@ -399,6 +476,49 @@ def generate_stack(stack_config: StackConfig):
 
                 readme_content += f"- **{instance.instance_name}**: {url}\n"
 
+        # Add PostgreSQL connection instructions if applicable
+        postgres_in_stack = any(inst.app_id == "postgres" for inst in stack_config.instances)
+        ignition_in_stack = any(inst.app_id == "ignition" for inst in stack_config.instances)
+
+        if postgres_in_stack and ignition_in_stack:
+            for inst in stack_config.instances:
+                if inst.app_id == "postgres":
+                    db_config = inst.config
+                    db_host = inst.instance_name
+                    db_port = db_config.get("port", 5432)
+                    db_name = db_config.get("database", "ignition")
+                    db_user = db_config.get("username", "ignition")
+                    db_pass = db_config.get("password", "password")
+
+                    readme_content += f"""
+## PostgreSQL Database Connection
+
+To connect Ignition to PostgreSQL:
+
+1. Open Ignition Gateway: http://localhost:8088
+2. Navigate to **Config → Databases → Connections**
+3. Click **"Create new Database Connection"**
+4. Enter these details:
+   - **Name**: PostgreSQL
+   - **Connect URL**: `jdbc:postgresql://{db_host}:{db_port}/{db_name}`
+   - **Username**: `{db_user}`
+   - **Password**: `{db_pass}`
+   - **Status Query**: `SELECT 1`
+   - **Max Connections**: 8
+5. Click **"Create New Database Connection"**
+6. Test the connection
+
+**Credentials Summary:**
+- Host: `{db_host}`
+- Port: `{db_port}`
+- Database: `{db_name}`
+- Username: `{db_user}`
+- Password: `{db_pass}`
+
+*See `configs/ignition-gateway/postgres_connection_info.txt` for detailed instructions.*
+"""
+                    break
+
         readme_content += """
 ## Stopping the Stack
 
@@ -429,6 +549,9 @@ def download_stack(stack_config: StackConfig):
     try:
         generated = generate_stack(stack_config)
 
+        # Check if Traefik is in the stack
+        has_traefik = any(inst.app_id == "traefik" for inst in stack_config.instances)
+
         # Create ZIP file in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
@@ -439,6 +562,333 @@ def download_stack(stack_config: StackConfig):
             # Create directory structure placeholders
             zip_file.writestr("configs/.gitkeep", "")
             zip_file.writestr("scripts/.gitkeep", "")
+
+            # Generate Ignition initialization script if Ignition is present
+            has_ignition = any(inst.app_id == "ignition" for inst in stack_config.instances)
+            has_postgres = any(inst.app_id == "postgres" for inst in stack_config.instances)
+
+            if has_ignition:
+                ignition_instances = [inst for inst in stack_config.instances if inst.app_id == "ignition"]
+
+                # Get Ignition and PostgreSQL configs for database auto-configuration
+                ignition_config = None
+                postgres_config = None
+                for inst in stack_config.instances:
+                    if inst.app_id == "ignition":
+                        ignition_config = inst
+                    elif inst.app_id == "postgres":
+                        postgres_config = inst
+
+                init_script = """#!/bin/bash
+# Ignition Volume Initialization Script
+# This script handles the two-phase startup for Ignition to properly initialize volumes
+
+set -e
+
+echo "🚀 Ignition Stack Initialization Script"
+echo "========================================"
+
+# Check if this is first run by looking for existing data directories
+FIRST_RUN=false
+"""
+
+                # Add checks for each Ignition instance
+                for inst in ignition_instances:
+                    service_name = inst.instance_name
+                    init_script += f"""
+if [ ! -d "./configs/{service_name}/data" ] || [ -z "$(ls -A ./configs/{service_name}/data 2>/dev/null)" ]; then
+    echo "📋 First run detected for {service_name} - will initialize volumes"
+    FIRST_RUN=true
+fi
+"""
+
+                init_script += """
+if [ "$FIRST_RUN" = true ]; then
+    echo ""
+    echo "🔧 PHASE 1: Initial startup without volumes"
+    echo "============================================"
+
+    # Create a temporary docker-compose without Ignition volumes
+    cp docker-compose.yml docker-compose.yml.backup
+
+    # Remove volume mounts from Ignition services
+"""
+
+                for inst in ignition_instances:
+                    service_name = inst.instance_name
+                    init_script += f"""    sed -i.tmp '/{service_name}/,/^  [a-z]/ {{ /volumes:/,/^    [^ ]/d; }}' docker-compose.yml
+"""
+
+                init_script += """
+    echo "Starting services without Ignition data volumes..."
+    docker-compose up -d
+
+    echo ""
+    echo "⏳ Waiting for Ignition to initialize (this may take 60-90 seconds)..."
+    sleep 30
+
+    # Wait for Ignition to be healthy
+    WAIT_TIME=0
+    MAX_WAIT=120
+
+    while [ $WAIT_TIME -lt $MAX_WAIT ]; do
+"""
+
+                for inst in ignition_instances:
+                    service_name = inst.instance_name
+                    init_script += f"""        HEALTH=$(docker inspect --format='{{{{.State.Health.Status}}}}' {service_name} 2>/dev/null || echo "starting")
+        if [ "$HEALTH" = "healthy" ]; then
+            echo "✅ {service_name} is healthy!"
+            break
+        fi
+"""
+
+                init_script += """
+        echo "   Status: $HEALTH - waiting... (${WAIT_TIME}s/${MAX_WAIT}s)"
+        sleep 10
+        WAIT_TIME=$((WAIT_TIME + 10))
+    done
+
+    if [ $WAIT_TIME -ge $MAX_WAIT ]; then
+        echo "⚠️  Warning: Ignition did not become healthy in time, but continuing..."
+    fi
+
+    echo ""
+    echo "🔧 PHASE 2: Enabling persistent volumes"
+    echo "========================================"
+
+    echo "Copying initialized data from containers to volumes..."
+"""
+
+                # Add docker cp commands for each Ignition instance
+                for inst in ignition_instances:
+                    service_name = inst.instance_name
+                    init_script += f"""    mkdir -p "./configs/{service_name}/data"
+    docker cp {service_name}:/usr/local/bin/ignition/data/. ./configs/{service_name}/data/ 2>/dev/null || echo "   Note: Data directory may already be populated"
+"""
+
+                # If PostgreSQL is present, create connection instructions
+                if has_postgres and ignition_config and postgres_config:
+                    db_name = postgres_config.config.get("database", "ignition")
+                    db_user = postgres_config.config.get("username", "ignition")
+                    db_pass = postgres_config.config.get("password", "password")
+                    db_host = postgres_config.instance_name
+                    db_port = postgres_config.config.get("port", 5432)
+
+                    # Create a database connection instructions file
+                    init_script += f"""
+    # Create PostgreSQL connection instructions
+    cat > "./configs/{ignition_config.instance_name}/postgres_connection_info.txt" <<'DBINFO'
+PostgreSQL Database Connection Information
+==========================================
+
+To add the PostgreSQL datasource in Ignition Gateway:
+
+1. Open Ignition Gateway at http://localhost:{ignition_config.config.get("http_port", 8088)}
+2. Go to Config → Databases → Connections
+3. Click "Create new Database Connection"
+4. Enter the following details:
+
+   Name: PostgreSQL
+   Connect URL: jdbc:postgresql://{db_host}:{db_port}/{db_name}
+   Username: {db_user}
+   Password: {db_pass}
+   Status Query: SELECT 1
+   Max Connections: 8
+
+5. Click "Create New Database Connection"
+6. Test the connection to verify it works
+
+Database Credentials:
+- Host: {db_host}
+- Port: {db_port}
+- Database: {db_name}
+- Username: {db_user}
+- Password: {db_pass}
+DBINFO
+    echo "   📄 PostgreSQL connection info saved to configs/{ignition_config.instance_name}/postgres_connection_info.txt"
+"""
+
+                for inst in ignition_instances:
+                    service_name = inst.instance_name
+                    init_script += f"""
+    # Fix permissions (Ignition runs as user 999:999 inside container)
+    sudo chown -R 999:999 "./configs/{service_name}/data" 2>/dev/null || chmod -R 777 "./configs/{service_name}/data"
+    echo "   ✅ Data copied for {service_name}"
+"""
+
+                init_script += """
+    echo "Stopping services..."
+    docker-compose down
+
+    # Restore original docker-compose with volumes
+    mv docker-compose.yml.backup docker-compose.yml
+    rm -f docker-compose.yml.tmp
+
+    echo "Restarting with persistent volumes enabled..."
+    docker-compose up -d
+
+    echo ""
+    echo "✅ Volume initialization complete!"
+    echo ""
+    echo "📊 Waiting for services to be ready..."
+    sleep 15
+
+else
+    echo ""
+    echo "✅ Data volumes already initialized - starting normally"
+    echo ""
+    docker-compose up -d
+fi
+
+echo ""
+echo "🎉 Stack is ready!"
+echo ""
+echo "📋 Service URLs:"
+"""
+
+                # Add service URLs
+                for instance in stack_config.instances:
+                    if instance.app_id == "ignition":
+                        http_port = instance.config.get("http_port", 8088)
+                        if has_traefik:
+                            subdomain = instance.instance_name.split('-')[0] if '-' in instance.instance_name else instance.instance_name
+                            init_script += f"""echo "   🔧 {instance.instance_name}: http://{subdomain}.localhost (via Traefik) or http://localhost:{http_port}"
+"""
+                        else:
+                            init_script += f"""echo "   🔧 {instance.instance_name}: http://localhost:{http_port}"
+"""
+
+                if has_traefik:
+                    init_script += """echo "   🌐 Traefik Dashboard: http://localhost:8080"
+"""
+
+                init_script += """
+echo ""
+echo "💡 To stop the stack: docker-compose down"
+echo "💡 To view logs: docker-compose logs -f"
+echo ""
+"""
+
+                zip_file.writestr("start.sh", init_script)
+
+                # Also create a Windows batch file version
+                win_script = f"""@echo off
+REM Ignition Volume Initialization Script for Windows
+REM This script handles the two-phase startup for Ignition to properly initialize volumes
+
+echo Ignition Stack Initialization Script
+echo ========================================
+echo.
+
+REM For Windows, we'll use a simpler approach - just start normally
+REM Users can manually do two-phase if needed
+
+echo Starting stack...
+docker-compose up -d
+
+echo.
+echo Stack is starting...
+echo.
+echo Service URLs:
+"""
+
+                for instance in stack_config.instances:
+                    if instance.app_id == "ignition":
+                        http_port = instance.config.get("http_port", 8088)
+                        if has_traefik:
+                            subdomain = instance.instance_name.split('-')[0] if '-' in instance.instance_name else instance.instance_name
+                            win_script += f"""echo    {instance.instance_name}: http://{subdomain}.localhost or http://localhost:{http_port}
+"""
+                        else:
+                            win_script += f"""echo    {instance.instance_name}: http://localhost:{http_port}
+"""
+
+                if has_traefik:
+                    win_script += """echo    Traefik Dashboard: http://localhost:8080
+"""
+
+                win_script += """
+echo.
+echo To stop: docker-compose down
+echo To view logs: docker-compose logs -f
+echo.
+pause
+"""
+
+                zip_file.writestr("start.bat", win_script)
+
+            # Generate Traefik configuration files if Traefik is present
+            if has_traefik:
+                # Main Traefik configuration
+                traefik_config = """api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: iiot-network
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: INFO
+"""
+                zip_file.writestr("configs/traefik/traefik.yml", traefik_config)
+
+                # Define web services and their ports (must match the docker-compose generation)
+                web_service_ports = {
+                    "ignition": lambda c: str(c.get("http_port", 8088)),
+                    "grafana": lambda c: str(c.get("port", 3000)),
+                    "nodered": lambda c: str(c.get("port", 1880)),
+                    "n8n": lambda c: str(c.get("port", 5678)),
+                    "keycloak": lambda c: str(c.get("port", 8180)),
+                    "prometheus": lambda c: "9090",
+                    "dozzle": lambda c: "8080",
+                    "portainer": lambda c: "9000",
+                    "guacamole": lambda c: "8080",
+                    "authentik": lambda c: "9000",
+                    "authelia": lambda c: "9091",
+                    "mailhog": lambda c: "8025",
+                    "influxdb": lambda c: "8086",
+                    "chronograf": lambda c: "8888"
+                }
+
+                # Generate dynamic routing for each web service
+                for instance in stack_config.instances:
+                    if instance.app_id != "traefik" and instance.app_id in web_service_ports:
+                        service_name = instance.instance_name
+                        config = instance.config
+
+                        # Create subdomain from service name
+                        subdomain = service_name.split('-')[0] if '-' in service_name else service_name
+
+                        # Get the port using the port function
+                        port = web_service_ports[instance.app_id](config)
+
+                        dynamic_config = f"""http:
+  routers:
+    {service_name}:
+      rule: "Host(`{subdomain}.localhost`)"
+      service: {service_name}
+      entryPoints:
+        - web
+
+  services:
+    {service_name}:
+      loadBalancer:
+        servers:
+          - url: "http://{service_name}:{port}"
+"""
+                        zip_file.writestr(f"configs/traefik/dynamic/{service_name}.yml", dynamic_config)
 
             # Add uploaded module files for Ignition instances
             for instance in stack_config.instances:

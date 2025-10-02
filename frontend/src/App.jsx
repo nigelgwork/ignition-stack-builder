@@ -210,6 +210,24 @@ function App() {
   const renderConfigInput = (instance, key, option, app) => {
     const value = instance.config[key]
 
+    // Check version constraint for version-specific fields
+    if (option.version_constraint) {
+      const selectedVersion = instance.config.version || app.default_version || 'latest'
+
+      // Determine if this is 8.1 or 8.3
+      let is83 = false
+      if (selectedVersion === 'latest' || selectedVersion.startsWith('8.3') || selectedVersion.startsWith('8.4') || selectedVersion.startsWith('9')) {
+        is83 = true
+      }
+
+      // Show the appropriate module set
+      if (is83 && option.version_constraint !== '8.3') {
+        return null
+      } else if (!is83 && option.version_constraint !== '8.1') {
+        return null
+      }
+    }
+
     switch (option.type) {
       case 'select':
         const options = option.options || app.available_versions || []
@@ -229,21 +247,32 @@ function App() {
         const availableOptions = option.options || []
         return (
           <div className="multiselect-container">
-            {availableOptions.map(opt => (
-              <label key={opt} className="multiselect-option">
-                <input
-                  type="checkbox"
-                  checked={selectedValues.includes(opt)}
-                  onChange={(e) => {
-                    const newValues = e.target.checked
-                      ? [...selectedValues, opt]
-                      : selectedValues.filter(v => v !== opt)
-                    updateInstanceConfig(instance.instanceId, key, newValues)
-                  }}
-                />
-                <span>{opt}</span>
-              </label>
-            ))}
+            {availableOptions.map(opt => {
+              // Handle both string options and object options with value/label/description
+              const optValue = typeof opt === 'object' ? opt.value : opt
+              const optLabel = typeof opt === 'object' ? opt.label : opt
+              const optDescription = typeof opt === 'object' ? opt.description : null
+
+              return (
+                <label
+                  key={optValue}
+                  className="multiselect-option"
+                  title={optDescription || ''}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedValues.includes(optValue)}
+                    onChange={(e) => {
+                      const newValues = e.target.checked
+                        ? [...selectedValues, optValue]
+                        : selectedValues.filter(v => v !== optValue)
+                      updateInstanceConfig(instance.instanceId, key, newValues)
+                    }}
+                  />
+                  <span>{optLabel}</span>
+                </label>
+              )
+            })}
           </div>
         )
 
@@ -505,7 +534,7 @@ function App() {
                             // For Ignition, separate configs into left and right columns
                             const isIgnition = app.id === 'ignition'
                             const leftColumnKeys = ['name', 'version', 'http_port', 'https_port', 'admin_username', 'admin_password', 'edition', 'memory_max', 'memory_init', 'commissioning_allow_non_secure', 'quick_start']
-                            const rightColumnKeys = ['modules', 'third_party_modules']
+                            const rightColumnKeys = ['modules_81', 'modules_83', 'modules', 'third_party_modules']
 
                             return (
                               <div key={instance.instanceId} className="instance-config inline-config">
@@ -526,12 +555,16 @@ function App() {
                                       <h4 className="column-heading">Basic Configuration</h4>
                                       {app.configurable_options && Object.entries(app.configurable_options)
                                         .filter(([key]) => leftColumnKeys.includes(key))
-                                        .map(([key, option]) => (
-                                          <div key={key} className="config-row">
-                                            <label>{option.label}:</label>
-                                            {renderConfigInput(instance, key, option, app)}
-                                          </div>
-                                        ))}
+                                        .map(([key, option]) => {
+                                          const input = renderConfigInput(instance, key, option, app)
+                                          if (!input) return null // Skip if version constraint doesn't match
+                                          return (
+                                            <div key={key} className="config-row">
+                                              <label title={option.description || ''}>{option.label}:</label>
+                                              {input}
+                                            </div>
+                                          )
+                                        })}
                                     </div>
 
                                     {/* Right Column - Modules */}
@@ -539,19 +572,23 @@ function App() {
                                       <h4 className="column-heading">Module Configuration</h4>
                                       {app.configurable_options && Object.entries(app.configurable_options)
                                         .filter(([key]) => rightColumnKeys.includes(key))
-                                        .map(([key, option]) => (
-                                          <div key={key} className="config-row-full">
-                                            <label>{option.label}:</label>
-                                            {renderConfigInput(instance, key, option, app)}
-                                          </div>
-                                        ))}
+                                        .map(([key, option]) => {
+                                          const input = renderConfigInput(instance, key, option, app)
+                                          if (!input) return null // Skip if version constraint doesn't match
+                                          return (
+                                            <div key={key} className="config-row-full">
+                                              <label title={option.description || ''}>{option.label}:</label>
+                                              {input}
+                                            </div>
+                                          )
+                                        })}
                                     </div>
                                   </div>
                                 ) : (
                                   <div className="config-grid">
                                     {app.configurable_options && Object.entries(app.configurable_options).map(([key, option]) => (
                                       <div key={key} className="config-row">
-                                        <label>{option.label}:</label>
+                                        <label title={option.description || ''}>{option.label}:</label>
                                         {renderConfigInput(instance, key, option, app)}
                                       </div>
                                     ))}
