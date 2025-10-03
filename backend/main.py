@@ -128,7 +128,6 @@ def generate_stack(stack_config: StackConfig):
 
         # Build docker-compose structure
         compose = {
-            "version": "3.8",
             "services": {},
             "networks": {
                 "iiot-network": {
