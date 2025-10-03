@@ -262,6 +262,42 @@ input:checked + .toggle-slider:before {
   font-style: italic;
 }
 
+.planned-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.planned-section h4 {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.app-item.planned {
+  opacity: 0.4;
+  background: var(--disabled-bg);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.app-item.planned:hover {
+  background: var(--disabled-bg);
+}
+
+.app-item.planned .app-name {
+  font-size: 0.85rem;
+  color: var(--disabled-text);
+}
+
+.app-item.planned .app-description {
+  font-size: 0.75rem;
+  color: var(--disabled-text);
+}
+
 /* Instance Configuration */
 .app-section {
   display: flex;

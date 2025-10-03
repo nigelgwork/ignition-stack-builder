@@ -80,7 +80,7 @@ function App() {
   }
 
   const updateInstanceConfig = (instanceId, key, value) => {
-    const newInstances = selectedInstances.map(inst => {
+    let newInstances = selectedInstances.map(inst => {
       if (inst.instanceId === instanceId) {
         return {
           ...inst,
@@ -89,6 +89,7 @@ function App() {
       }
       return inst
     })
+
     setSelectedInstances(newInstances)
   }
 
@@ -204,7 +205,27 @@ function App() {
   }
 
   const getAppsByCategory = (category) => {
-    return catalog.applications.filter(app => app.category === category)
+    return catalog.applications.filter(app => app.category === category && !app.managed_by_parent && !app.hidden)
+  }
+
+  const getAvailableDatabases = () => {
+    return selectedInstances
+      .filter(inst => ['postgres', 'mariadb', 'mssql'].includes(inst.app_id))
+      .map(inst => ({
+        value: inst.instance_name,
+        label: `${catalog.applications.find(a => a.id === inst.app_id)?.name} (${inst.config.name || inst.instance_name})`,
+        instance: inst
+      }))
+  }
+
+  const getAvailableMqttBrokers = () => {
+    return selectedInstances
+      .filter(inst => ['emqx', 'mosquitto'].includes(inst.app_id))
+      .map(inst => ({
+        value: inst.instance_name,
+        label: `${catalog.applications.find(a => a.id === inst.app_id)?.name}`,
+        instance: inst
+      }))
   }
 
   const renderConfigInput = (instance, key, option, app) => {
@@ -360,9 +381,10 @@ function App() {
   }
 
   const getNodeType = (appId) => {
-    if (appId === 'traefik') return 'proxy'
+    if (appId === 'traefik' || appId === 'nginx-proxy-manager') return 'proxy'
     if (appId === 'ignition') return 'app'
     if (appId === 'postgres' || appId === 'mariadb' || appId === 'mssql' || appId === 'sqlite') return 'database'
+    if (appId === 'pgadmin' || appId === 'phpmyadmin') return 'database'
     if (appId === 'keycloak' || appId === 'authentik' || appId === 'authelia') return 'auth'
     if (appId === 'nodered' || appId === 'n8n') return 'app'
     if (appId === 'emqx' || appId === 'mosquitto' || appId === 'rabbitmq') return 'app'
@@ -419,6 +441,12 @@ function App() {
       return `http://localhost:${config.port || 9091}`
     } else if (appId === 'mailhog') {
       return `http://localhost:${config.http_port || 8025}`
+    } else if (appId === 'pgadmin') {
+      return `http://localhost:${config.port || 5050}`
+    } else if (appId === 'phpmyadmin') {
+      return `http://localhost:${config.port || 8080}`
+    } else if (appId === 'nginx-proxy-manager') {
+      return `http://localhost:${config.admin_port || 81}`
     }
     return 'N/A'
   }
@@ -486,19 +514,23 @@ function App() {
 
             {/* Application Categories */}
             {catalog.categories.map(category => {
-              const apps = getAppsByCategory(category)
-              if (apps.length === 0) return null
+              const allApps = getAppsByCategory(category)
+              const enabledApps = allApps.filter(app => app.enabled)
+              const comingSoonApps = allApps.filter(app => !app.enabled)
+
+              if (allApps.length === 0) return null
 
               return (
                 <div key={category} className="category">
                   <h2>{category}</h2>
                   <div className="app-list">
-                    {apps.map(app => {
+                    {/* Enabled Apps */}
+                    {enabledApps.map(app => {
                       const instances = getInstancesForApp(app.id)
 
                       return (
                         <div key={app.id} className="app-section">
-                          <div className={`app-item ${!app.enabled ? 'disabled' : ''}`}>
+                          <div className="app-item">
                             <div className="app-info">
                               <div className="app-name">{app.name}</div>
                               {app.description && (
@@ -506,25 +538,21 @@ function App() {
                               )}
                             </div>
                             <div className="app-controls">
-                              {app.enabled ? (
-                                app.supports_multiple ? (
-                                  <button
-                                    className="add-instance-btn"
-                                    onClick={() => addInstance(app)}
-                                  >
-                                    + Add Instance
-                                  </button>
-                                ) : (
-                                  <div className="checkbox-wrapper">
-                                    <input
-                                      type="checkbox"
-                                      checked={isAppSelected(app.id)}
-                                      onChange={() => toggleSingleApp(app)}
-                                    />
-                                  </div>
-                                )
+                              {app.supports_multiple ? (
+                                <button
+                                  className="add-instance-btn"
+                                  onClick={() => addInstance(app)}
+                                >
+                                  + Add Instance
+                                </button>
                               ) : (
-                                <span className="coming-soon">Coming Soon</span>
+                                <div className="checkbox-wrapper">
+                                  <input
+                                    type="checkbox"
+                                    checked={isAppSelected(app.id)}
+                                    onChange={() => toggleSingleApp(app)}
+                                  />
+                                </div>
                               )}
                             </div>
                           </div>
@@ -592,6 +620,68 @@ function App() {
                                         {renderConfigInput(instance, key, option, app)}
                                       </div>
                                     ))}
+
+                                    {/* Dynamic Integration Options for Ignition */}
+                                    {app.id === 'ignition' && getAvailableDatabases().length > 0 && (
+                                      <>
+                                        <div className="config-row" style={{ gridColumn: '1 / -1', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)' }}>
+                                          <label style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--accent-color)' }}>Database Integration</label>
+                                        </div>
+                                        <div className="config-row">
+                                          <label title="Automatically register database in Ignition">Auto-register Database:</label>
+                                          <input
+                                            type="checkbox"
+                                            checked={instance.config.auto_register_db || false}
+                                            onChange={(e) => updateInstanceConfig(instance.instanceId, 'auto_register_db', e.target.checked)}
+                                          />
+                                        </div>
+                                        {instance.config.auto_register_db && (
+                                          <div className="config-row">
+                                            <label>Select Database:</label>
+                                            <select
+                                              value={instance.config.db_to_register || ''}
+                                              onChange={(e) => updateInstanceConfig(instance.instanceId, 'db_to_register', e.target.value)}
+                                            >
+                                              <option value="">-- Select Database --</option>
+                                              {getAvailableDatabases().map(db => (
+                                                <option key={db.value} value={db.value}>{db.label}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+
+                                    {/* Dynamic Integration Options for Node-RED */}
+                                    {app.id === 'nodered' && getAvailableMqttBrokers().length > 0 && (
+                                      <>
+                                        <div className="config-row" style={{ gridColumn: '1 / -1', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)' }}>
+                                          <label style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--accent-color)' }}>MQTT Integration</label>
+                                        </div>
+                                        <div className="config-row">
+                                          <label title="Connect Node-RED to MQTT broker">Connect to MQTT:</label>
+                                          <input
+                                            type="checkbox"
+                                            checked={instance.config.connect_mqtt || false}
+                                            onChange={(e) => updateInstanceConfig(instance.instanceId, 'connect_mqtt', e.target.checked)}
+                                          />
+                                        </div>
+                                        {instance.config.connect_mqtt && (
+                                          <div className="config-row">
+                                            <label>Select MQTT Broker:</label>
+                                            <select
+                                              value={instance.config.mqtt_broker || ''}
+                                              onChange={(e) => updateInstanceConfig(instance.instanceId, 'mqtt_broker', e.target.value)}
+                                            >
+                                              <option value="">-- Select Broker --</option>
+                                              {getAvailableMqttBrokers().map(broker => (
+                                                <option key={broker.value} value={broker.value}>{broker.label}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -600,35 +690,30 @@ function App() {
                         </div>
                       )
                     })}
+
+                    {/* Coming Soon Apps Section */}
+                    {comingSoonApps.length > 0 && (
+                      <div className="planned-section">
+                        <h4>Coming Soon</h4>
+                        {comingSoonApps.map(app => (
+                          <div key={app.id} className="app-item planned disabled">
+                            <div className="app-info">
+                              <div className="app-name">{app.name}</div>
+                              {app.description && (
+                                <div className="app-description">{app.description}</div>
+                              )}
+                            </div>
+                            <div className="app-controls">
+                              <span className="coming-soon">{app.planned ? 'Planned' : 'Coming Soon'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )
             })}
-
-            {/* Integrations Section (Placeholder) */}
-            <div className="integrations-section">
-              <h3>Integrations (Coming Soon)</h3>
-              <div className="integration-item">
-                <input type="checkbox" disabled />
-                <label>Auto-register DBs in Ignition</label>
-              </div>
-              <div className="integration-item">
-                <input type="checkbox" disabled />
-                <label>Configure Keycloak clients</label>
-              </div>
-              <div className="integration-item">
-                <input type="checkbox" disabled />
-                <label>Connect Node-RED → MQTT</label>
-              </div>
-              <div className="integration-item">
-                <input type="checkbox" disabled />
-                <label>Enable Prometheus scraping</label>
-              </div>
-              <div className="integration-item">
-                <input type="checkbox" disabled />
-                <label>Store secrets in Vault</label>
-              </div>
-            </div>
           </div>
 
           <div className="preview-panel">

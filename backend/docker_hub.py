@@ -2,9 +2,12 @@
 Docker Hub API integration for fetching available image tags
 """
 import requests
-from typing import List, Optional
+from typing import List
 from functools import lru_cache
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=128)
@@ -31,7 +34,7 @@ def get_docker_tags(repository: str, limit: int = 100) -> List[str]:
 
         return tags
     except Exception as e:
-        print(f"Error fetching Docker tags for {repository}: {e}")
+        logger.error(f"Error fetching Docker tags for {repository}: {e}")
         return []
 
 

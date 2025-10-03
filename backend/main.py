@@ -1,3 +1,7 @@
+"""
+IIoT Stack Builder API
+FastAPI backend for generating Docker Compose stacks for industrial IoT applications.
+"""
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -8,8 +12,12 @@ import yaml
 import io
 import zipfile
 import base64
-from pathlib import Path
+import logging
 from docker_hub import get_ignition_versions, get_postgres_versions, get_docker_tags
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="IIoT Stack Builder API")
 
@@ -22,23 +30,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load catalog
 def load_catalog():
+    """Load the application catalog from catalog.json"""
     with open("catalog.json", "r") as f:
         return json.load(f)
 
-# Pydantic models
 class InstanceConfig(BaseModel):
+    """Configuration for a single service instance"""
     app_id: str
     instance_name: str
     config: Dict[str, Any]
     instanceId: Optional[float] = None
 
 class GlobalSettings(BaseModel):
+    """Global settings for the entire stack"""
     timezone: str = "Australia/Adelaide"
     restart_policy: str = "unless-stopped"
 
 class StackConfig(BaseModel):
+    """Complete stack configuration with instances and global settings"""
     instances: List[InstanceConfig]
     integrations: List[str] = []
     global_settings: Optional[GlobalSettings] = None
@@ -74,7 +84,7 @@ def get_versions(app_id: str):
 
         return {"versions": versions}
     except Exception as e:
-        print(f"Error fetching versions for {app_id}: {e}")
+        logger.error(f"Error fetching versions for {app_id}: {e}")
         # Fallback to catalog versions
         catalog = load_catalog()
         app = next((a for a in catalog["applications"] if a["id"] == app_id), None)
@@ -137,8 +147,36 @@ def generate_stack(stack_config: StackConfig):
         # Check if Traefik is in the stack
         has_traefik = any(inst.app_id == "traefik" for inst in stack_config.instances)
 
-        # Process each instance
+        # Handle pgadmin/phpmyadmin checkboxes - add instances dynamically
+        instances_to_process = list(stack_config.instances)
         for instance in stack_config.instances:
+            if instance.app_id == "postgres" and instance.config.get("include_pgadmin"):
+                # Add pgAdmin instance
+                pgadmin_instance = InstanceConfig(
+                    app_id="pgadmin",
+                    instance_name="pgadmin",
+                    config={
+                        "port": 5050,
+                        "email": "admin@admin.com",
+                        "password": "admin"
+                    },
+                    instanceId=None
+                )
+                instances_to_process.append(pgadmin_instance)
+            elif instance.app_id == "mariadb" and instance.config.get("include_phpmyadmin"):
+                # Add phpMyAdmin instance
+                phpmyadmin_instance = InstanceConfig(
+                    app_id="phpmyadmin",
+                    instance_name="phpmyadmin",
+                    config={
+                        "port": 8080
+                    },
+                    instanceId=None
+                )
+                instances_to_process.append(phpmyadmin_instance)
+
+        # Process each instance
+        for instance in instances_to_process:
             app = catalog_dict.get(instance.app_id)
             if not app or not app.get("enabled", False):
                 continue
@@ -279,6 +317,17 @@ def generate_stack(stack_config: StackConfig):
 
                 elif instance.app_id == "vault":
                     env["VAULT_DEV_ROOT_TOKEN_ID"] = config.get("root_token", env.get("VAULT_DEV_ROOT_TOKEN_ID"))
+
+                elif instance.app_id == "pgadmin":
+                    env["PGADMIN_DEFAULT_EMAIL"] = config.get("email", env.get("PGADMIN_DEFAULT_EMAIL"))
+                    env["PGADMIN_DEFAULT_PASSWORD"] = config.get("password", env.get("PGADMIN_DEFAULT_PASSWORD"))
+
+                elif instance.app_id == "phpmyadmin":
+                    # PMA_HOST should point to the mariadb instance
+                    mariadb_instance = next((inst for inst in stack_config.instances if inst.app_id == "mariadb"), None)
+                    if mariadb_instance:
+                        env["PMA_HOST"] = mariadb_instance.instance_name
+                        env["PMA_PORT"] = str(mariadb_instance.config.get("port", 3306))
 
                 service["environment"] = env
 
@@ -470,6 +519,15 @@ def generate_stack(stack_config: StackConfig):
                 elif instance.app_id == "mailhog":
                     port = config.get("http_port", 8025)
                     url = f"http://localhost:{port} (SMTP: {config.get('smtp_port', 1025)})"
+                elif instance.app_id == "pgadmin":
+                    port = config.get("port", 5050)
+                    url = f"http://localhost:{port}"
+                elif instance.app_id == "phpmyadmin":
+                    port = config.get("port", 8080)
+                    url = f"http://localhost:{port}"
+                elif instance.app_id == "nginx-proxy-manager":
+                    admin_port = config.get("admin_port", 81)
+                    url = f"http://localhost:{admin_port} (Admin UI)"
                 else:
                     port = config.get("port", config.get("http_port", "8080"))
                     url = f"http://localhost:{port}"
@@ -904,7 +962,7 @@ log:
                                     content = base64.b64decode(encoded_content)
                                     zip_file.writestr(f"modules/{instance.instance_name}/{filename}", content)
                                 except Exception as e:
-                                    print(f"Error decoding module {filename}: {e}")
+                                    logger.error(f"Error decoding module {filename}: {e}")
 
         zip_buffer.seek(0)
 

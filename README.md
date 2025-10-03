@@ -117,10 +117,15 @@ iiot-stack.zip
 ├── docker-compose.yml          # Complete service definitions
 ├── .env                         # Environment variables and configuration
 ├── README.md                    # Service URLs and setup instructions
-├── configs/                     # Placeholder for service configs
+├── start.sh / start.bat        # Initialization scripts (for Ignition stacks)
+├── configs/                     # Service-specific configurations
+│   ├── traefik/                # Traefik configuration (if included)
 │   └── .gitkeep
-└── scripts/                     # Placeholder for helper scripts
-    └── .gitkeep
+├── scripts/                     # Placeholder for helper scripts
+│   └── .gitkeep
+└── modules/                     # Uploaded 3rd party modules (if any)
+    └── ignition-1/
+        └── custom-module.modl
 ```
 
 The generated `docker-compose.yml` includes:
@@ -150,7 +155,7 @@ The `.env` file contains:
 
 1. **Clone the repository**
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/yourusername/ignition-stack-builder.git
    cd ignition-stack-builder
    ```
 
@@ -165,6 +170,11 @@ The `.env` file contains:
    http://localhost:3500
    ```
 
+   The backend API is available at:
+   ```
+   http://localhost:8000
+   ```
+
 4. **Build your IIoT stack**
    - Toggle dark/light mode with the switch in the header
    - Set global settings (timezone defaults to Australia/Adelaide, restart policy)
@@ -176,9 +186,25 @@ The `.env` file contains:
    - Click "Download Stack" to get your complete project as a ZIP file
 
 5. **Deploy your generated stack**
+
+   Extract the downloaded ZIP file and navigate to the folder:
    ```bash
    unzip iiot-stack.zip
    cd iiot-stack
+   ```
+
+   For stacks with Ignition, use the initialization script:
+   ```bash
+   # Linux/Mac
+   chmod +x start.sh
+   ./start.sh
+
+   # Windows
+   start.bat
+   ```
+
+   For other stacks, start directly with Docker Compose:
+   ```bash
    docker-compose up -d
    ```
 
@@ -187,8 +213,8 @@ The `.env` file contains:
 ## ✅ Implemented Features
 
 ### Application Catalog (24+ Services)
-- ✅ **Industrial Platforms**: Ignition (with edition and JVM memory configuration)
-- ✅ **Databases**: PostgreSQL, MariaDB, MSSQL, SQLite
+- ✅ **Industrial Platforms**: Ignition (with edition, JVM memory, module selection, and 3rd party module upload)
+- ✅ **Databases**: PostgreSQL, MariaDB, MSSQL, SQLite (with pgAdmin and phpMyAdmin options)
 - ✅ **Messaging**: EMQX, Mosquitto, RabbitMQ
 - ✅ **Automation**: Node-RED, n8n
 - ✅ **Monitoring**: Prometheus, Grafana, Loki, Dozzle
@@ -196,13 +222,15 @@ The `.env` file contains:
 - ✅ **DevOps**: Portainer, WhatUpDocker, MailHog
 - ✅ **Security**: HashiCorp Vault
 - ✅ **Remote Access**: Guacamole
-- ✅ **Networking**: Traefik
+- ✅ **Networking**: Traefik (with automatic service routing)
 
 ### UI Features
 - ✅ Dark mode by default with light/dark toggle
 - ✅ Multi-instance support for applicable services
 - ✅ Inline instance configuration
-- ✅ Version selection for all containers
+- ✅ Dynamic version selection from Docker Hub
+- ✅ Module selection for Ignition (checkbox interface)
+- ✅ 3rd party module file upload (.modl files)
 - ✅ Global settings (timezone, restart policy)
 - ✅ Service overview with color-coded cards
 - ✅ Access URL display for each service
@@ -211,10 +239,13 @@ The `.env` file contains:
 ### Backend Features
 - ✅ FastAPI REST API
 - ✅ Dynamic Docker Compose generation
+- ✅ Docker Hub API integration for version fetching
+- ✅ Module file upload and encoding
+- ✅ Ignition initialization scripts (start.sh / start.bat)
+- ✅ Traefik configuration generation
 - ✅ Environment variable management
-- ✅ Version-tagged container images
 - ✅ ZIP download with complete project structure
-- ✅ Generated README documentation
+- ✅ Generated README documentation with service URLs
 
 ## 🔮 Planned Features
 - 🔄 Auto-integration engine (database auto-registration, OAuth configuration)

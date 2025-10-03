@@ -156,7 +156,7 @@
       "image": "postgres",
       "default_version": "latest",
       "available_versions": ["latest", "16-alpine", "16", "15-alpine", "15", "14-alpine", "14", "13-alpine", "13"],
-      "supports_multiple": true,
+      "supports_multiple": false,
       "default_config": {
         "ports": ["5432:5432"],
         "environment": {
@@ -172,10 +172,37 @@
         "port": {"type": "number", "default": 5432, "label": "Port"},
         "database": {"type": "text", "default": "iiot_db", "label": "Database Name"},
         "username": {"type": "text", "default": "postgres", "label": "Username"},
-        "password": {"type": "password", "default": "postgres", "label": "Password"}
+        "password": {"type": "password", "default": "postgres", "label": "Password"},
+        "include_pgadmin": {"type": "checkbox", "default": false, "label": "Include pgAdmin", "description": "Add pgAdmin web interface for database management"}
       },
       "integrations": ["db_provider"],
       "enabled": true
+    },
+    {
+      "id": "pgadmin",
+      "name": "pgAdmin",
+      "category": "Databases",
+      "description": "PostgreSQL management tool",
+      "image": "dpage/pgadmin4",
+      "default_version": "latest",
+      "available_versions": ["latest", "8.14", "8.13", "8.12"],
+      "supports_multiple": false,
+      "default_config": {
+        "ports": ["5050:80"],
+        "environment": {
+          "PGADMIN_DEFAULT_EMAIL": "admin@admin.com",
+          "PGADMIN_DEFAULT_PASSWORD": "admin"
+        },
+        "volumes": ["./configs/{instance_name}/data:/var/lib/pgadmin"]
+      },
+      "configurable_options": {
+        "port": {"type": "number", "default": 5050, "label": "HTTP Port"},
+        "email": {"type": "text", "default": "admin@admin.com", "label": "Admin Email"},
+        "password": {"type": "password", "default": "admin", "label": "Admin Password"}
+      },
+      "integrations": [],
+      "enabled": true,
+      "hidden": true
     },
     {
       "id": "traefik",
@@ -200,6 +227,34 @@
         "http_port": {"type": "number", "default": 80, "label": "HTTP Port"},
         "https_port": {"type": "number", "default": 443, "label": "HTTPS Port"},
         "dashboard_port": {"type": "number", "default": 8080, "label": "Dashboard Port"}
+      },
+      "integrations": ["reverse_proxy"],
+      "enabled": true
+    },
+    {
+      "id": "nginx-proxy-manager",
+      "name": "Nginx Proxy Manager",
+      "category": "Networking / Proxy",
+      "description": "Docker container for managing Nginx proxy hosts with a simple web UI",
+      "image": "jc21/nginx-proxy-manager",
+      "default_version": "latest",
+      "available_versions": ["latest", "2.12.1", "2.12.0", "2.11.3"],
+      "supports_multiple": false,
+      "default_config": {
+        "ports": ["80:80", "443:443", "81:81"],
+        "environment": {
+          "DB_SQLITE_FILE": "/data/database.sqlite"
+        },
+        "volumes": [
+          "./configs/{instance_name}/data:/data",
+          "./configs/{instance_name}/letsencrypt:/etc/letsencrypt"
+        ]
+      },
+      "configurable_options": {
+        "version": {"type": "select", "default": "latest", "label": "Version"},
+        "http_port": {"type": "number", "default": 80, "label": "HTTP Port"},
+        "https_port": {"type": "number", "default": 443, "label": "HTTPS Port"},
+        "admin_port": {"type": "number", "default": 81, "label": "Admin UI Port"}
       },
       "integrations": ["reverse_proxy"],
       "enabled": true
@@ -243,7 +298,7 @@
       "image": "mariadb",
       "default_version": "latest",
       "available_versions": ["latest", "11", "10.11", "10.10", "10.9", "10.6"],
-      "supports_multiple": true,
+      "supports_multiple": false,
       "default_config": {
         "ports": ["3306:3306"],
         "environment": {
@@ -261,10 +316,35 @@
         "database": {"type": "text", "default": "iiot_db", "label": "Database Name"},
         "username": {"type": "text", "default": "mariadb", "label": "Username"},
         "password": {"type": "password", "default": "mariadb", "label": "Password"},
-        "root_password": {"type": "password", "default": "rootpassword", "label": "Root Password"}
+        "root_password": {"type": "password", "default": "rootpassword", "label": "Root Password"},
+        "include_phpmyadmin": {"type": "checkbox", "default": false, "label": "Include phpMyAdmin", "description": "Add phpMyAdmin web interface for database management"}
       },
       "integrations": ["db_provider"],
       "enabled": true
+    },
+    {
+      "id": "phpmyadmin",
+      "name": "phpMyAdmin",
+      "category": "Databases",
+      "description": "MariaDB/MySQL management tool",
+      "image": "phpmyadmin/phpmyadmin",
+      "default_version": "latest",
+      "available_versions": ["latest", "5.2", "5.1"],
+      "supports_multiple": false,
+      "default_config": {
+        "ports": ["8080:80"],
+        "environment": {
+          "PMA_HOST": "mariadb-1",
+          "PMA_PORT": "3306"
+        },
+        "volumes": []
+      },
+      "configurable_options": {
+        "port": {"type": "number", "default": 8080, "label": "HTTP Port"}
+      },
+      "integrations": [],
+      "enabled": true,
+      "hidden": true
     },
     {
       "id": "mssql",
@@ -274,7 +354,7 @@
       "image": "mcr.microsoft.com/mssql/server",
       "default_version": "2022-latest",
       "available_versions": ["2022-latest", "2019-latest", "2017-latest"],
-      "supports_multiple": true,
+      "supports_multiple": false,
       "default_config": {
         "ports": ["1433:1433"],
         "environment": {
@@ -292,7 +372,7 @@
         "edition": {"type": "select", "default": "Developer", "label": "Edition", "options": ["Developer", "Express", "Standard", "Enterprise"]}
       },
       "integrations": ["db_provider"],
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "emqx",
@@ -339,7 +419,7 @@
         "websocket_port": {"type": "number", "default": 9001, "label": "WebSocket Port"}
       },
       "integrations": ["mqtt_broker"],
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "rabbitmq",
@@ -366,7 +446,8 @@
         "password": {"type": "password", "default": "admin", "label": "Password"}
       },
       "integrations": ["message_broker"],
-      "enabled": true
+      "enabled": false,
+      "planned": true
     },
     {
       "id": "nodered",
@@ -414,7 +495,7 @@
         "password": {"type": "password", "default": "admin", "label": "Password"}
       },
       "integrations": ["workflow_automation"],
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "prometheus",
@@ -436,7 +517,8 @@
         "port": {"type": "number", "default": 9090, "label": "HTTP Port"}
       },
       "integrations": ["metrics_collector"],
-      "enabled": true
+      "enabled": false,
+      "planned": true
     },
     {
       "id": "grafana",
@@ -462,7 +544,8 @@
         "admin_password": {"type": "password", "default": "admin", "label": "Admin Password"}
       },
       "integrations": ["visualization"],
-      "enabled": true
+      "enabled": false,
+      "planned": true
     },
     {
       "id": "loki",
@@ -483,7 +566,8 @@
         "port": {"type": "number", "default": 3100, "label": "HTTP Port"}
       },
       "integrations": ["log_aggregation"],
-      "enabled": true
+      "enabled": false,
+      "planned": true
     },
     {
       "id": "dozzle",
@@ -529,7 +613,8 @@
         "https_port": {"type": "number", "default": 9443, "label": "HTTPS Port"}
       },
       "integrations": ["oauth_provider"],
-      "enabled": true
+      "enabled": false,
+      "planned": true
     },
     {
       "id": "authelia",
@@ -550,7 +635,8 @@
         "port": {"type": "number", "default": 9091, "label": "HTTP Port"}
       },
       "integrations": ["oauth_provider"],
-      "enabled": true
+      "enabled": false,
+      "planned": true
     },
     {
       "id": "portainer",
@@ -619,7 +705,7 @@
         "root_token": {"type": "password", "default": "root", "label": "Root Token (Dev Mode)"}
       },
       "integrations": ["secrets_management"],
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "guacamole",
@@ -646,7 +732,7 @@
         "port": {"type": "number", "default": 8080, "label": "HTTP Port"}
       },
       "integrations": ["remote_access"],
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "mailhog",
