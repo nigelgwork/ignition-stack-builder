@@ -19,7 +19,9 @@
       "Bash(./start.sh:*)",
       "Bash(docker restart:*)",
       "Bash(docker exec:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(xargs docker rmi:*)",
+      "Bash(/git/ignition-stack-builder/run_backend_tests.sh)"
     ],
     "deny": [],
     "ask": []

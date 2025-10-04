@@ -14,6 +14,7 @@ import zipfile
 import base64
 import logging
 from docker_hub import get_ignition_versions, get_postgres_versions, get_docker_tags
+from integration_engine import get_integration_engine
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,11 +48,37 @@ class GlobalSettings(BaseModel):
     timezone: str = "Australia/Adelaide"
     restart_policy: str = "unless-stopped"
 
+class IntegrationSettings(BaseModel):
+    """Settings for automatic integrations"""
+    reverse_proxy: Optional[Dict[str, Any]] = {
+        "base_domain": "localhost",
+        "enable_https": False,
+        "letsencrypt_email": ""
+    }
+    mqtt: Optional[Dict[str, Any]] = {
+        "enable_tls": False,
+        "username": "",
+        "password": "",
+        "tls_port": 8883
+    }
+    oauth: Optional[Dict[str, Any]] = {
+        "realm_name": "iiot",
+        "auto_configure_services": True
+    }
+    database: Optional[Dict[str, Any]] = {
+        "auto_register": True
+    }
+    email: Optional[Dict[str, Any]] = {
+        "from_address": "noreply@iiot.local",
+        "auto_configure_services": True
+    }
+
 class StackConfig(BaseModel):
     """Complete stack configuration with instances and global settings"""
     instances: List[InstanceConfig]
     integrations: List[str] = []
     global_settings: Optional[GlobalSettings] = None
+    integration_settings: Optional[IntegrationSettings] = None
 
 @app.get("/")
 def read_root():
@@ -114,6 +141,36 @@ async def upload_module(file: UploadFile = File(...)):
             "encoded": encoded
         }
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/detect-integrations")
+def detect_integrations(stack_config: StackConfig):
+    """
+    Detect possible integrations, conflicts, and recommendations
+    based on selected services
+    """
+    try:
+        # Convert instances to dict format for integration engine
+        instances = [
+            {
+                "app_id": inst.app_id,
+                "instance_name": inst.instance_name,
+                "config": inst.config
+            }
+            for inst in stack_config.instances
+        ]
+
+        # Get integration engine and detect integrations
+        engine = get_integration_engine()
+        detection_result = engine.detect_integrations(instances)
+
+        # Add human-readable summary
+        detection_result["summary"] = engine.get_integration_summary(detection_result)
+
+        return detection_result
+
+    except Exception as e:
+        logger.error(f"Error detecting integrations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate")

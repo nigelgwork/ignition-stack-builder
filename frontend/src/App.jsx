@@ -15,6 +15,31 @@ function App() {
     timezone: 'Australia/Adelaide',
     restart_policy: 'unless-stopped'
   })
+  const [integrationSettings, setIntegrationSettings] = useState({
+    reverse_proxy: {
+      base_domain: 'localhost',
+      enable_https: false,
+      letsencrypt_email: ''
+    },
+    mqtt: {
+      enable_tls: false,
+      username: '',
+      password: '',
+      tls_port: 8883
+    },
+    oauth: {
+      realm_name: 'iiot',
+      auto_configure_services: true
+    },
+    database: {
+      auto_register: true
+    },
+    email: {
+      from_address: 'noreply@iiot.local',
+      auto_configure_services: true
+    }
+  })
+  const [integrationResults, setIntegrationResults] = useState(null)
 
   useEffect(() => {
     // Set dark mode by default
@@ -28,6 +53,27 @@ function App() {
     // Load catalog
     fetchCatalog()
   }, [])
+
+  // Detect integrations whenever instances change
+  useEffect(() => {
+    if (selectedInstances.length > 0) {
+      detectIntegrations()
+    } else {
+      setIntegrationResults(null)
+    }
+  }, [selectedInstances])
+
+  const detectIntegrations = async () => {
+    try {
+      const response = await axios.post(`${API_URL}/detect-integrations`, {
+        instances: selectedInstances,
+        global_settings: globalSettings
+      })
+      setIntegrationResults(response.data)
+    } catch (error) {
+      console.error('Error detecting integrations:', error)
+    }
+  }
 
   const fetchCatalog = async () => {
     try {
@@ -52,7 +98,38 @@ function App() {
     }
   }
 
+  const isServiceDisabled = (appId) => {
+    // Define mutual exclusivity groups
+    const mutualExclusivityGroups = {
+      reverse_proxy: ['traefik', 'nginx-proxy-manager']
+    }
+
+    for (const [groupName, services] of Object.entries(mutualExclusivityGroups)) {
+      if (services.includes(appId)) {
+        // Check if any other service from this group is already selected
+        const conflictingService = selectedInstances.find(inst =>
+          services.includes(inst.app_id) && inst.app_id !== appId
+        )
+
+        if (conflictingService) {
+          return {
+            disabled: true,
+            reason: `Only one reverse proxy allowed. Remove ${conflictingService.app_id} first.`
+          }
+        }
+      }
+    }
+
+    return { disabled: false, reason: '' }
+  }
+
   const addInstance = (app) => {
+    // Check if service is disabled
+    const disabledStatus = isServiceDisabled(app.id)
+    if (disabledStatus.disabled) {
+      return // Silently prevent adding, UI shows it's disabled
+    }
+
     const count = (instanceCounter[app.id] || 0) + 1
     const instanceName = `${app.id}-${count}`
 
@@ -167,12 +244,62 @@ function App() {
     return selectedInstances.filter(inst => inst.app_id === appId)
   }
 
+  // Helper to determine if a service should show integration settings
+  const getIntegrationSettingsFor = (appId) => {
+    if (!integrationResults || !integrationResults.integrations) return null
+
+    const integrations = integrationResults.integrations
+
+    // MQTT Broker settings (EMQX, Mosquitto)
+    if (['emqx', 'mosquitto'].includes(appId) && integrations.mqtt_broker) {
+      if (integrations.mqtt_broker.providers.some(p => p.service_id === appId)) {
+        return {
+          type: 'mqtt_broker',
+          data: integrations.mqtt_broker
+        }
+      }
+    }
+
+    // Reverse Proxy settings (Traefik, NPM)
+    if (['traefik', 'nginx-proxy-manager'].includes(appId) && integrations.reverse_proxy) {
+      if (integrations.reverse_proxy.provider === appId) {
+        return {
+          type: 'reverse_proxy',
+          data: integrations.reverse_proxy
+        }
+      }
+    }
+
+    // OAuth Provider settings (Keycloak, Authentik, Authelia)
+    if (['keycloak', 'authentik', 'authelia'].includes(appId) && integrations.oauth_provider) {
+      if (integrations.oauth_provider.providers.includes(appId)) {
+        return {
+          type: 'oauth_provider',
+          data: integrations.oauth_provider
+        }
+      }
+    }
+
+    // Email Testing settings (MailHog)
+    if (appId === 'mailhog' && integrations.email_testing) {
+      if (integrations.email_testing.provider === appId) {
+        return {
+          type: 'email_testing',
+          data: integrations.email_testing
+        }
+      }
+    }
+
+    return null
+  }
+
   const generateStack = async () => {
     try {
       const response = await axios.post(`${API_URL}/generate`, {
         instances: selectedInstances,
         integrations: [],
-        global_settings: globalSettings
+        global_settings: globalSettings,
+        integration_settings: integrationSettings
       })
       setGeneratedConfig(response.data)
     } catch (error) {
@@ -186,7 +313,8 @@ function App() {
       const response = await axios.post(`${API_URL}/download`, {
         instances: selectedInstances,
         integrations: [],
-        global_settings: globalSettings
+        global_settings: globalSettings,
+        integration_settings: integrationSettings
       }, {
         responseType: 'blob'
       })
@@ -512,6 +640,54 @@ function App() {
               </div>
             </div>
 
+            {/* Integration Status */}
+            {integrationResults && (integrationResults.conflicts?.length > 0 || integrationResults.warnings?.length > 0 || integrationResults.recommendations?.length > 0) && (
+              <div className="category integration-status">
+                <h2>🔗 Integration Status</h2>
+
+                {/* Conflicts (Errors) */}
+                {integrationResults.conflicts && integrationResults.conflicts.length > 0 && (
+                  <div className="integration-section error-section">
+                    <h3>⚠️ Conflicts</h3>
+                    {integrationResults.conflicts.map((conflict, idx) => (
+                      <div key={idx} className="integration-message error-message">
+                        <strong>{conflict.services.join(', ')}</strong>: {conflict.message}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Warnings */}
+                {integrationResults.warnings && integrationResults.warnings.length > 0 && (
+                  <div className="integration-section warning-section">
+                    <h3>ℹ️ Warnings</h3>
+                    {integrationResults.warnings.map((warning, idx) => (
+                      <div key={idx} className="integration-message warning-message">
+                        {warning.service && <strong>{warning.service}:</strong>} {warning.message}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Recommendations */}
+                {integrationResults.recommendations && integrationResults.recommendations.length > 0 && (
+                  <div className="integration-section info-section">
+                    <h3>💡 Recommendations</h3>
+                    {integrationResults.recommendations.map((rec, idx) => (
+                      <div key={idx} className="integration-message info-message">
+                        {rec.message}
+                        {rec.suggest && rec.suggest.length > 0 && (
+                          <div className="suggestion-services">
+                            Consider adding: {rec.suggest.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Application Categories */}
             {catalog.categories.map(category => {
               const allApps = getAppsByCategory(category)
@@ -527,14 +703,18 @@ function App() {
                     {/* Enabled Apps */}
                     {enabledApps.map(app => {
                       const instances = getInstancesForApp(app.id)
+                      const disabledStatus = isServiceDisabled(app.id)
 
                       return (
                         <div key={app.id} className="app-section">
-                          <div className="app-item">
+                          <div className={`app-item ${disabledStatus.disabled ? 'disabled' : ''}`} title={disabledStatus.disabled ? disabledStatus.reason : ''}>
                             <div className="app-info">
                               <div className="app-name">{app.name}</div>
                               {app.description && (
                                 <div className="app-description">{app.description}</div>
+                              )}
+                              {disabledStatus.disabled && (
+                                <div className="disabled-reason">🔒 {disabledStatus.reason}</div>
                               )}
                             </div>
                             <div className="app-controls">
@@ -542,6 +722,7 @@ function App() {
                                 <button
                                   className="add-instance-btn"
                                   onClick={() => addInstance(app)}
+                                  disabled={disabledStatus.disabled}
                                 >
                                   + Add Instance
                                 </button>
@@ -551,6 +732,7 @@ function App() {
                                     type="checkbox"
                                     checked={isAppSelected(app.id)}
                                     onChange={() => toggleSingleApp(app)}
+                                    disabled={disabledStatus.disabled}
                                   />
                                 </div>
                               )}
@@ -620,6 +802,200 @@ function App() {
                                         {renderConfigInput(instance, key, option, app)}
                                       </div>
                                     ))}
+
+                                    {/* Integration Provider Settings */}
+                                    {(() => {
+                                      const integrationInfo = getIntegrationSettingsFor(app.id)
+                                      if (!integrationInfo) return null
+
+                                      return (
+                                        <>
+                                          <div className="config-row" style={{ gridColumn: '1 / -1', marginTop: '1rem', paddingTop: '1rem', borderTop: '2px solid var(--accent-color)' }}>
+                                            <label style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--accent-color)' }}>
+                                              {integrationInfo.type === 'mqtt_broker' && '📡 MQTT Broker Settings'}
+                                              {integrationInfo.type === 'reverse_proxy' && '🌐 Reverse Proxy Settings'}
+                                              {integrationInfo.type === 'oauth_provider' && '🔐 OAuth/SSO Settings'}
+                                              {integrationInfo.type === 'email_testing' && '📧 Email Testing Settings'}
+                                            </label>
+                                          </div>
+
+                                          {/* MQTT Broker Settings */}
+                                          {integrationInfo.type === 'mqtt_broker' && (
+                                            <>
+                                              <div className="config-row">
+                                                <label>Enable TLS/MQTTS:</label>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={integrationSettings.mqtt.enable_tls}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    mqtt: {...integrationSettings.mqtt, enable_tls: e.target.checked}
+                                                  })}
+                                                />
+                                              </div>
+                                              {integrationSettings.mqtt.enable_tls && (
+                                                <div className="config-row">
+                                                  <label>TLS Port:</label>
+                                                  <input
+                                                    type="number"
+                                                    value={integrationSettings.mqtt.tls_port}
+                                                    onChange={(e) => setIntegrationSettings({
+                                                      ...integrationSettings,
+                                                      mqtt: {...integrationSettings.mqtt, tls_port: parseInt(e.target.value)}
+                                                    })}
+                                                  />
+                                                </div>
+                                              )}
+                                              <div className="config-row">
+                                                <label>Username (optional):</label>
+                                                <input
+                                                  type="text"
+                                                  value={integrationSettings.mqtt.username}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    mqtt: {...integrationSettings.mqtt, username: e.target.value}
+                                                  })}
+                                                  placeholder="mqtt_user"
+                                                />
+                                              </div>
+                                              <div className="config-row">
+                                                <label>Password (optional):</label>
+                                                <input
+                                                  type="password"
+                                                  value={integrationSettings.mqtt.password}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    mqtt: {...integrationSettings.mqtt, password: e.target.value}
+                                                  })}
+                                                  placeholder="Enter password"
+                                                />
+                                              </div>
+                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                                  Will be configured for: {integrationInfo.data.clients.map(c => c.instance_name).join(', ')}
+                                                </small>
+                                              </div>
+                                            </>
+                                          )}
+
+                                          {/* Reverse Proxy Settings */}
+                                          {integrationInfo.type === 'reverse_proxy' && (
+                                            <>
+                                              <div className="config-row">
+                                                <label>Base Domain:</label>
+                                                <input
+                                                  type="text"
+                                                  value={integrationSettings.reverse_proxy.base_domain}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    reverse_proxy: {...integrationSettings.reverse_proxy, base_domain: e.target.value}
+                                                  })}
+                                                  placeholder="localhost"
+                                                />
+                                              </div>
+                                              <div className="config-row">
+                                                <label>Enable HTTPS/TLS:</label>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={integrationSettings.reverse_proxy.enable_https}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    reverse_proxy: {...integrationSettings.reverse_proxy, enable_https: e.target.checked}
+                                                  })}
+                                                />
+                                              </div>
+                                              {integrationSettings.reverse_proxy.enable_https && (
+                                                <div className="config-row">
+                                                  <label>Let's Encrypt Email:</label>
+                                                  <input
+                                                    type="email"
+                                                    value={integrationSettings.reverse_proxy.letsencrypt_email}
+                                                    onChange={(e) => setIntegrationSettings({
+                                                      ...integrationSettings,
+                                                      reverse_proxy: {...integrationSettings.reverse_proxy, letsencrypt_email: e.target.value}
+                                                    })}
+                                                    placeholder="admin@example.com"
+                                                  />
+                                                </div>
+                                              )}
+                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                                  Routing for: {integrationInfo.data.targets.map(t => t.default_subdomain).join(', ')}
+                                                </small>
+                                              </div>
+                                            </>
+                                          )}
+
+                                          {/* OAuth/SSO Settings */}
+                                          {integrationInfo.type === 'oauth_provider' && (
+                                            <>
+                                              <div className="config-row">
+                                                <label>Realm Name:</label>
+                                                <input
+                                                  type="text"
+                                                  value={integrationSettings.oauth.realm_name}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    oauth: {...integrationSettings.oauth, realm_name: e.target.value}
+                                                  })}
+                                                  placeholder="iiot"
+                                                />
+                                              </div>
+                                              <div className="config-row">
+                                                <label>Auto-configure Services:</label>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={integrationSettings.oauth.auto_configure_services}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    oauth: {...integrationSettings.oauth, auto_configure_services: e.target.checked}
+                                                  })}
+                                                />
+                                              </div>
+                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                                  Will configure OAuth for: {integrationInfo.data.clients.map(c => c.service_id).join(', ')}
+                                                </small>
+                                              </div>
+                                            </>
+                                          )}
+
+                                          {/* Email Testing Settings */}
+                                          {integrationInfo.type === 'email_testing' && (
+                                            <>
+                                              <div className="config-row">
+                                                <label>From Address:</label>
+                                                <input
+                                                  type="email"
+                                                  value={integrationSettings.email.from_address}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    email: {...integrationSettings.email, from_address: e.target.value}
+                                                  })}
+                                                  placeholder="noreply@iiot.local"
+                                                />
+                                              </div>
+                                              <div className="config-row">
+                                                <label>Auto-configure Services:</label>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={integrationSettings.email.auto_configure_services}
+                                                  onChange={(e) => setIntegrationSettings({
+                                                    ...integrationSettings,
+                                                    email: {...integrationSettings.email, auto_configure_services: e.target.checked}
+                                                  })}
+                                                />
+                                              </div>
+                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                                  Will be used by: {integrationInfo.data.clients.map(c => c.instance_name).join(', ')}
+                                                </small>
+                                              </div>
+                                            </>
+                                          )}
+                                        </>
+                                      )
+                                    })()}
 
                                     {/* Dynamic Integration Options for Ignition */}
                                     {app.id === 'ignition' && getAvailableDatabases().length > 0 && (
