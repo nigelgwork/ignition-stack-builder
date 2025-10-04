@@ -493,6 +493,156 @@ function App() {
           />
         )
 
+      case 'user_list':
+        const users = value || option.default || []
+
+        const addUser = () => {
+          const newUser = {
+            username: '',
+            password: '',
+            email: '',
+            firstName: '',
+            lastName: '',
+            temporary: true
+          }
+          updateInstanceConfig(instance.instanceId, key, [...users, newUser])
+        }
+
+        const removeUser = (index) => {
+          const newUsers = users.filter((_, i) => i !== index)
+          updateInstanceConfig(instance.instanceId, key, newUsers)
+        }
+
+        const updateUser = (index, field, val) => {
+          const newUsers = users.map((user, i) =>
+            i === index ? { ...user, [field]: val } : user
+          )
+          updateInstanceConfig(instance.instanceId, key, newUsers)
+        }
+
+        const handleCSVImport = (e) => {
+          const file = e.target.files[0]
+          if (!file) return
+
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            const csv = event.target.result
+            const lines = csv.split('\n').filter(line => line.trim())
+
+            // Skip header row if it exists
+            const hasHeader = lines[0].toLowerCase().includes('username')
+            const dataLines = hasHeader ? lines.slice(1) : lines
+
+            const importedUsers = dataLines.map(line => {
+              const [username, password, email, firstName, lastName] = line.split(',').map(v => v.trim())
+              return {
+                username: username || '',
+                password: password || '',
+                email: email || '',
+                firstName: firstName || '',
+                lastName: lastName || '',
+                temporary: true
+              }
+            }).filter(user => user.username && user.password)
+
+            updateInstanceConfig(instance.instanceId, key, [...users, ...importedUsers])
+          }
+          reader.readAsText(file)
+          e.target.value = '' // Reset input
+        }
+
+        return (
+          <div className="user-list-container">
+            <div className="user-list-header">
+              <button
+                type="button"
+                className="add-user-btn"
+                onClick={addUser}
+              >
+                + Add User
+              </button>
+              <div className="csv-import-wrapper">
+                <label htmlFor={`csv-import-${instance.instanceId}`} className="csv-import-btn">
+                  📄 Import CSV
+                </label>
+                <input
+                  id={`csv-import-${instance.instanceId}`}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCSVImport}
+                  style={{ display: 'none' }}
+                />
+              </div>
+            </div>
+
+            {users.length > 0 && (
+              <div className="user-list">
+                {users.map((user, index) => (
+                  <div key={index} className="user-item">
+                    <div className="user-fields">
+                      <input
+                        type="text"
+                        placeholder="Username *"
+                        value={user.username}
+                        onChange={(e) => updateUser(index, 'username', e.target.value)}
+                        className="user-input user-username"
+                      />
+                      <input
+                        type="password"
+                        placeholder="Password *"
+                        value={user.password}
+                        onChange={(e) => updateUser(index, 'password', e.target.value)}
+                        className="user-input user-password"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={user.email}
+                        onChange={(e) => updateUser(index, 'email', e.target.value)}
+                        className="user-input user-email"
+                      />
+                      <input
+                        type="text"
+                        placeholder="First Name"
+                        value={user.firstName}
+                        onChange={(e) => updateUser(index, 'firstName', e.target.value)}
+                        className="user-input user-firstname"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Last Name"
+                        value={user.lastName}
+                        onChange={(e) => updateUser(index, 'lastName', e.target.value)}
+                        className="user-input user-lastname"
+                      />
+                      <label className="user-temp-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={user.temporary}
+                          onChange={(e) => updateUser(index, 'temporary', e.target.checked)}
+                        />
+                        <span>Temp</span>
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      className="remove-user-btn"
+                      onClick={() => removeUser(index)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="csv-format-help">
+              CSV format: username,password,email,firstName,lastName<br/>
+              Required fields: username, password
+            </p>
+          </div>
+        )
+
       default: // text
         return (
           <input
@@ -525,6 +675,24 @@ function App() {
 
   const getServiceUrl = (instance, config) => {
     const appId = instance.app_id
+
+    // Check if reverse proxy is configured with custom domain
+    const hasReverseProxy = integrationResults?.integrations?.reverse_proxy
+    const baseDomain = integrationSettings.reverse_proxy.base_domain
+    const useHttps = integrationSettings.reverse_proxy.enable_https
+
+    // If reverse proxy is active and this service is a target, use the proxy URL
+    if (hasReverseProxy && baseDomain !== 'localhost') {
+      const isTarget = hasReverseProxy.targets?.some(t => t.service_id === appId)
+      if (isTarget && appId !== 'traefik' && appId !== 'nginx-proxy-manager') {
+        const protocol = useHttps ? 'https' : 'http'
+        // Use custom name from config, fallback to instance_name
+        const containerName = instance.config.name || instance.instance_name
+        return `${protocol}://${containerName}.${baseDomain}`
+      }
+    }
+
+    // Default localhost URLs
     if (appId === 'ignition') {
       return `http://localhost:${config.http_port || 8088}`
     } else if (appId === 'postgres') {
@@ -871,8 +1039,11 @@ function App() {
                                                 />
                                               </div>
                                               <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                                  Will be configured for: {integrationInfo.data.clients.map(c => c.instance_name).join(', ')}
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+                                                  Will be configured for: {integrationInfo.data.clients.map(c => {
+                                                    const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
+                                                    return inst?.config?.name || c.instance_name
+                                                  }).join(', ')}
                                                 </small>
                                               </div>
                                             </>
@@ -919,7 +1090,7 @@ function App() {
                                                 </div>
                                               )}
                                               <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
                                                   Routing for: {integrationInfo.data.targets.map(t => t.default_subdomain).join(', ')}
                                                 </small>
                                               </div>
@@ -953,8 +1124,11 @@ function App() {
                                                 />
                                               </div>
                                               <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                                  Will configure OAuth for: {integrationInfo.data.clients.map(c => c.service_id).join(', ')}
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+                                                  Will configure OAuth for: {integrationInfo.data.clients.map(c => {
+                                                    const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
+                                                    return inst?.config?.name || c.service_id
+                                                  }).join(', ')}
                                                 </small>
                                               </div>
                                             </>
@@ -987,8 +1161,11 @@ function App() {
                                                 />
                                               </div>
                                               <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                                  Will be used by: {integrationInfo.data.clients.map(c => c.instance_name).join(', ')}
+                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+                                                  Will be used by: {integrationInfo.data.clients.map(c => {
+                                                    const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
+                                                    return inst?.config?.name || c.instance_name
+                                                  }).join(', ')}
                                                 </small>
                                               </div>
                                             </>

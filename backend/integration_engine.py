@@ -264,11 +264,15 @@ class IntegrationEngine:
                     # Find instance details
                     instance = next((i for i in instances if i["app_id"] == service_id), None)
                     if instance:
+                        # Use custom name from config, fallback to instance_name or service_id
+                        custom_name = instance.get("config", {}).get("name")
+                        subdomain = custom_name or instance.get("instance_name") or service_id
+
                         target = {
                             "service_id": service_id,
                             "instance_name": instance.get("instance_name"),
                             "ports": service_integration.get("ports", []),
-                            "default_subdomain": service_integration.get("default_subdomain", service_id),
+                            "default_subdomain": subdomain,
                             "health_check": service_integration.get("health_check")
                         }
                         integration["targets"].append(target)

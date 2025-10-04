@@ -21,7 +21,8 @@
       "Bash(docker exec:*)",
       "Bash(docker compose:*)",
       "Bash(xargs docker rmi:*)",
-      "Bash(/git/ignition-stack-builder/run_backend_tests.sh)"
+      "Bash(/git/ignition-stack-builder/run_backend_tests.sh)",
+      "Read(//tmp/**)"
     ],
     "deny": [],
     "ask": []
