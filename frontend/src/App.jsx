@@ -13,8 +13,12 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [globalSettings, setGlobalSettings] = useState({
     timezone: 'Australia/Adelaide',
-    restart_policy: 'unless-stopped'
+    restart_policy: 'unless-stopped',
+    ntfy_enabled: false,
+    ntfy_server: 'https://ntfy.sh',
+    ntfy_topic: ''
   })
+  const [passwordVisibility, setPasswordVisibility] = useState({})
   const [integrationSettings, setIntegrationSettings] = useState({
     reverse_proxy: {
       base_domain: 'localhost',
@@ -383,7 +387,7 @@ function App() {
         const options = option.options || app.available_versions || []
         return (
           <select
-            value={value || option.default}
+            value={value !== undefined ? value : option.default}
             onChange={(e) => updateInstanceConfig(instance.instanceId, key, e.target.value)}
           >
             {options.map(opt => (
@@ -460,7 +464,7 @@ function App() {
         }
         return (
           <textarea
-            value={value || option.default || ''}
+            value={value !== undefined ? value : (option.default || '')}
             onChange={(e) => updateInstanceConfig(instance.instanceId, key, e.target.value)}
             placeholder={option.placeholder || ''}
             rows={4}
@@ -477,19 +481,44 @@ function App() {
         )
 
       case 'password':
+        const passwordFieldKey = `${instance.instanceId}_${key}`
+        const isPasswordVisible = passwordVisibility[passwordFieldKey] || false
         return (
-          <input
-            type="password"
-            value={value || option.default}
-            onChange={(e) => updateInstanceConfig(instance.instanceId, key, e.target.value)}
-          />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              type={isPasswordVisible ? "text" : "password"}
+              value={value !== undefined ? value : (option.default || '')}
+              onChange={(e) => updateInstanceConfig(instance.instanceId, key, e.target.value)}
+              style={{ flex: 1, paddingRight: '35px' }}
+            />
+            <button
+              type="button"
+              onClick={() => setPasswordVisibility(prev => ({
+                ...prev,
+                [passwordFieldKey]: !prev[passwordFieldKey]
+              }))}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '4px',
+                opacity: 0.6
+              }}
+              title={isPasswordVisible ? "Hide password" : "Show password"}
+            >
+              {isPasswordVisible ? '👁️' : '👁️‍🗨️'}
+            </button>
+          </div>
         )
 
       case 'number':
         return (
           <input
             type="number"
-            value={value || option.default}
+            value={value !== undefined ? value : (option.default || '')}
             onChange={(e) => updateInstanceConfig(instance.instanceId, key, e.target.value)}
           />
         )
@@ -648,7 +677,7 @@ function App() {
         return (
           <input
             type="text"
-            value={value || option.default}
+            value={value !== undefined ? value : (option.default || '')}
             onChange={(e) => updateInstanceConfig(instance.instanceId, key, e.target.value)}
           />
         )
@@ -806,6 +835,40 @@ function App() {
                     <option value="on-failure">on-failure</option>
                   </select>
                 </div>
+                <div className="config-row">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={globalSettings.ntfy_enabled || false}
+                      onChange={(e) => setGlobalSettings({...globalSettings, ntfy_enabled: e.target.checked})}
+                    />
+                    {' '}Enable Ntfy Monitoring
+                  </label>
+                  <span className="field-hint">Monitor stack with ntfy notifications</span>
+                </div>
+                {globalSettings.ntfy_enabled && (
+                  <>
+                    <div className="config-row">
+                      <label>Ntfy Server:</label>
+                      <input
+                        type="text"
+                        value={globalSettings.ntfy_server || 'https://ntfy.sh'}
+                        onChange={(e) => setGlobalSettings({...globalSettings, ntfy_server: e.target.value})}
+                        placeholder="https://ntfy.sh"
+                      />
+                    </div>
+                    <div className="config-row">
+                      <label>Ntfy Topic:</label>
+                      <input
+                        type="text"
+                        value={globalSettings.ntfy_topic || ''}
+                        onChange={(e) => setGlobalSettings({...globalSettings, ntfy_topic: e.target.value})}
+                        placeholder="my-stack-monitoring"
+                      />
+                      <span className="field-hint">Unique topic name for your stack</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

@@ -15,6 +15,22 @@ import base64
 import logging
 from docker_hub import get_ignition_versions, get_postgres_versions, get_docker_tags
 from integration_engine import get_integration_engine
+from config_generator import (
+    generate_mosquitto_config,
+    generate_mosquitto_password_file,
+    generate_grafana_datasources,
+    generate_traefik_static_config,
+    generate_traefik_dynamic_config,
+    generate_oauth_env_vars,
+    generate_email_env_vars
+)
+from ntfy_monitor import generate_ntfy_monitor_script, generate_ntfy_readme_section
+from keycloak_generator import generate_keycloak_realm, generate_keycloak_readme_section
+from ignition_db_registration import (
+    generate_ignition_db_registration_script,
+    generate_ignition_db_readme_section,
+    generate_requirements_file
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +63,9 @@ class GlobalSettings(BaseModel):
     """Global settings for the entire stack"""
     timezone: str = "Australia/Adelaide"
     restart_policy: str = "unless-stopped"
+    ntfy_enabled: bool = False
+    ntfy_server: str = "https://ntfy.sh"
+    ntfy_topic: str = ""
 
 class IntegrationSettings(BaseModel):
     """Settings for automatic integrations"""
@@ -183,6 +202,21 @@ def generate_stack(stack_config: StackConfig):
         # Get global settings
         global_settings = stack_config.global_settings or GlobalSettings()
 
+        # Get integration settings
+        integration_settings = stack_config.integration_settings or IntegrationSettings()
+
+        # Detect integrations
+        instances_for_detection = [
+            {
+                "app_id": inst.app_id,
+                "instance_name": inst.instance_name,
+                "config": inst.config
+            }
+            for inst in stack_config.instances
+        ]
+        engine = get_integration_engine()
+        integration_results = engine.detect_integrations(instances_for_detection)
+
         # Build docker-compose structure
         compose = {
             "services": {},
@@ -194,6 +228,9 @@ def generate_stack(stack_config: StackConfig):
             "volumes": {}
         }
 
+        # Track generated config files
+        config_files = {}
+
         env_vars = []
         env_vars.append("# Global Settings")
         env_vars.append(f"TZ={global_settings.timezone}")
@@ -202,6 +239,42 @@ def generate_stack(stack_config: StackConfig):
 
         # Check if Traefik is in the stack
         has_traefik = any(inst.app_id == "traefik" for inst in stack_config.instances)
+        has_oauth_provider = "oauth_provider" in integration_results.get("integrations", {})
+        has_email_testing = "email_testing" in integration_results.get("integrations", {})
+        has_mqtt_broker = "mqtt_broker" in integration_results.get("integrations", {})
+
+        # Pre-generate Keycloak realm configuration if needed (for OAuth client secrets)
+        keycloak_clients = []
+        keycloak_realm_config = None
+        if has_oauth_provider and integration_settings.oauth.get("auto_configure_services", True):
+            oauth_int = integration_results["integrations"]["oauth_provider"]
+            keycloak_providers = [p for p in oauth_int.get("providers", []) if p == "keycloak"]
+
+            if keycloak_providers:
+                # Get list of services that will be OAuth clients
+                oauth_client_services = [
+                    client["service_id"]
+                    for client in oauth_int.get("clients", [])
+                ]
+
+                # Get users from integration settings
+                realm_users = integration_settings.oauth.get("realm_users", [])
+
+                # Generate realm configuration
+                realm_name = integration_settings.oauth.get("realm_name", "iiot")
+                base_domain = integration_settings.reverse_proxy.get("base_domain", "localhost")
+                enable_https = integration_settings.reverse_proxy.get("enable_https", False)
+
+                keycloak_realm_config = generate_keycloak_realm(
+                    realm_name=realm_name,
+                    services=oauth_client_services,
+                    users=realm_users,
+                    base_domain=base_domain,
+                    enable_https=enable_https
+                )
+
+                # Store clients for use in OAuth env vars and README
+                keycloak_clients = keycloak_realm_config.get("clients", [])
 
         # Handle pgadmin/phpmyadmin checkboxes - add instances dynamically
         instances_to_process = list(stack_config.instances)
@@ -355,17 +428,85 @@ def generate_stack(stack_config: StackConfig):
                     # REMOVED: IGNITION_QUICKSTART causes volume mount issues
                     # Users should manually commission the gateway after first start
 
+                    # Apply email integration if available (for alarm notifications)
+                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                        email_int = integration_results["integrations"]["email_testing"]
+                        mailhog_instance = email_int.get("provider", "mailhog")
+                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
+                        email_env_vars = generate_email_env_vars("ignition", mailhog_instance, from_address)
+                        env.update(email_env_vars)
+
                 elif instance.app_id == "keycloak":
                     env["KEYCLOAK_ADMIN"] = config.get("admin_username", env.get("KEYCLOAK_ADMIN"))
                     env["KEYCLOAK_ADMIN_PASSWORD"] = config.get("admin_password", env.get("KEYCLOAK_ADMIN_PASSWORD"))
+
+                    # Apply email integration if available (for user emails)
+                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                        email_int = integration_results["integrations"]["email_testing"]
+                        mailhog_instance = email_int.get("provider", "mailhog")
+                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
+                        email_env_vars = generate_email_env_vars("keycloak", mailhog_instance, from_address)
+                        env.update(email_env_vars)
 
                 elif instance.app_id == "grafana":
                     env["GF_SECURITY_ADMIN_USER"] = config.get("admin_username", env.get("GF_SECURITY_ADMIN_USER"))
                     env["GF_SECURITY_ADMIN_PASSWORD"] = config.get("admin_password", env.get("GF_SECURITY_ADMIN_PASSWORD"))
 
+                    # Apply OAuth integration if available
+                    if has_oauth_provider and integration_settings.oauth.get("auto_configure_services", True):
+                        oauth_int = integration_results["integrations"]["oauth_provider"]
+                        for client in oauth_int.get("clients", []):
+                            if client["service_id"] == "grafana" and client["instance_name"] == instance.instance_name:
+                                provider = client["provider"]
+                                realm_name = integration_settings.oauth.get("realm_name", "iiot")
+
+                                # Get client secret from generated Keycloak realm
+                                client_secret = None
+                                if keycloak_clients:
+                                    kc_client = next((kc for kc in keycloak_clients if kc.get("clientId") == "grafana"), None)
+                                    if kc_client:
+                                        client_secret = kc_client.get("secret")
+
+                                oauth_env_vars = generate_oauth_env_vars("grafana", provider, realm_name, client_secret=client_secret)
+                                env.update(oauth_env_vars)
+
+                    # Apply email integration if available
+                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                        email_int = integration_results["integrations"]["email_testing"]
+                        mailhog_instance = email_int.get("provider", "mailhog")
+                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
+                        email_env_vars = generate_email_env_vars("grafana", mailhog_instance, from_address)
+                        env.update(email_env_vars)
+
                 elif instance.app_id == "n8n":
                     env["N8N_BASIC_AUTH_USER"] = config.get("username", env.get("N8N_BASIC_AUTH_USER"))
                     env["N8N_BASIC_AUTH_PASSWORD"] = config.get("password", env.get("N8N_BASIC_AUTH_PASSWORD"))
+
+                    # Apply OAuth integration if available
+                    if has_oauth_provider and integration_settings.oauth.get("auto_configure_services", True):
+                        oauth_int = integration_results["integrations"]["oauth_provider"]
+                        for client in oauth_int.get("clients", []):
+                            if client["service_id"] == "n8n" and client["instance_name"] == instance.instance_name:
+                                provider = client["provider"]
+                                realm_name = integration_settings.oauth.get("realm_name", "iiot")
+
+                                # Get client secret from generated Keycloak realm
+                                client_secret = None
+                                if keycloak_clients:
+                                    kc_client = next((kc for kc in keycloak_clients if kc.get("clientId") == "n8n"), None)
+                                    if kc_client:
+                                        client_secret = kc_client.get("secret")
+
+                                oauth_env_vars = generate_oauth_env_vars("n8n", provider, realm_name, client_secret=client_secret)
+                                env.update(oauth_env_vars)
+
+                    # Apply email integration if available
+                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                        email_int = integration_results["integrations"]["email_testing"]
+                        mailhog_instance = email_int.get("provider", "mailhog")
+                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
+                        email_env_vars = generate_email_env_vars("n8n", mailhog_instance, from_address)
+                        env.update(email_env_vars)
 
                 elif instance.app_id == "rabbitmq":
                     env["RABBITMQ_DEFAULT_USER"] = config.get("username", env.get("RABBITMQ_DEFAULT_USER"))
@@ -394,11 +535,21 @@ def generate_stack(stack_config: StackConfig):
                     # Replace {instance_name} placeholder
                     vol = vol.replace("{instance_name}", service_name)
                     volumes.append(vol)
+
+                # Add Keycloak import volume if realm import is configured
+                if instance.app_id == "keycloak" and keycloak_clients:
+                    volumes.append(f"./configs/{service_name}/import:/opt/keycloak/data/import:ro")
+
                 service["volumes"] = volumes
 
             # Handle command
             if "command" in app["default_config"]:
                 service["command"] = app["default_config"]["command"]
+
+                # Modify Keycloak command to include import flag
+                if instance.app_id == "keycloak" and keycloak_clients:
+                    realm_name = integration_settings.oauth.get("realm_name", "iiot")
+                    service["command"] = f"start-dev --import-realm"
 
             # Handle cap_add (for services like Vault)
             if "cap_add" in app["default_config"]:
@@ -431,12 +582,22 @@ def generate_stack(stack_config: StackConfig):
                     # Get the port using the port function
                     port = web_service_ports[instance.app_id](config)
 
+                    # Get domain from integration settings
+                    base_domain = integration_settings.reverse_proxy.get("base_domain", "localhost")
+                    enable_https = integration_settings.reverse_proxy.get("enable_https", False)
+                    entrypoint = "websecure" if enable_https else "web"
+
                     service["labels"] = [
                         "traefik.enable=true",
-                        f"traefik.http.routers.{service_name}.rule=Host(`{subdomain}.localhost`)",
-                        f"traefik.http.routers.{service_name}.entrypoints=web",
+                        f"traefik.http.routers.{service_name}.rule=Host(`{subdomain}.{base_domain}`)",
+                        f"traefik.http.routers.{service_name}.entrypoints={entrypoint}",
                         f"traefik.http.services.{service_name}.loadbalancer.server.port={port}"
                     ]
+
+                    # Add TLS if HTTPS is enabled
+                    if enable_https:
+                        service["labels"].append(f"traefik.http.routers.{service_name}.tls=true")
+                        service["labels"].append(f"traefik.http.routers.{service_name}.tls.certresolver=letsencrypt")
 
             compose["services"][service_name] = service
 
@@ -447,6 +608,63 @@ def generate_stack(stack_config: StackConfig):
                 for key, value in service["environment"].items():
                     env_vars.append(f"{service_name.upper().replace('-', '_')}_{key}={value}")
             env_vars.append("")
+
+        # Generate integration configuration files
+        # 1. MQTT Broker Configuration
+        if has_mqtt_broker:
+            mqtt_int = integration_results["integrations"]["mqtt_broker"]
+            for provider_info in mqtt_int.get("providers", []):
+                provider_id = provider_info["service_id"]
+                instance_name = provider_info["instance_name"]
+
+                if provider_id == "mosquitto":
+                    # Generate Mosquitto configuration
+                    mqtt_username = integration_settings.mqtt.get("username", "")
+                    mqtt_password = integration_settings.mqtt.get("password", "")
+                    mqtt_enable_tls = integration_settings.mqtt.get("enable_tls", False)
+                    mqtt_tls_port = integration_settings.mqtt.get("tls_port", 8883)
+
+                    config_files[f"configs/{instance_name}/mosquitto.conf"] = generate_mosquitto_config(
+                        username=mqtt_username,
+                        password=mqtt_password,
+                        enable_tls=mqtt_enable_tls,
+                        tls_port=mqtt_tls_port
+                    )
+
+                    if mqtt_username and mqtt_password:
+                        config_files[f"configs/{instance_name}/passwd"] = generate_mosquitto_password_file(
+                            mqtt_username, mqtt_password
+                        )
+
+        # 2. Grafana Datasource Provisioning
+        if "visualization" in integration_results.get("integrations", {}):
+            viz_int = integration_results["integrations"]["visualization"]
+            grafana_instance = viz_int.get("provider")
+
+            if grafana_instance:
+                datasources_config = []
+
+                for ds in viz_int.get("datasources", []):
+                    ds_type = ds["service_id"]
+                    ds_instance_name = ds["instance_name"]
+                    ds_config = ds["config"]
+
+                    datasources_config.append({
+                        "type": ds_type,
+                        "instance_name": ds_instance_name,
+                        "config": ds_config
+                    })
+
+                if datasources_config:
+                    config_files[f"configs/{grafana_instance}/provisioning/datasources/auto.yaml"] = \
+                        generate_grafana_datasources(datasources_config)
+
+        # 3. Keycloak Realm Configuration - Save to file
+        if keycloak_realm_config:
+            # Use the pre-generated realm config (ensures secrets match)
+            realm_name = integration_settings.oauth.get("realm_name", "iiot")
+            realm_json = json.dumps(keycloak_realm_config, indent=2)
+            config_files[f"configs/keycloak/import/realm-{realm_name}.json"] = realm_json
 
         # Convert to YAML
         compose_yaml = yaml.dump(compose, default_flow_style=False, sort_keys=False)
@@ -633,6 +851,37 @@ To connect Ignition to PostgreSQL:
 """
                     break
 
+        # Add Keycloak SSO section if configured
+        if keycloak_clients:
+            realm_name = integration_settings.oauth.get("realm_name", "iiot")
+            readme_content += generate_keycloak_readme_section(realm_name, keycloak_clients)
+
+        # Add Ignition database auto-registration section if applicable
+        ignition_db_list = []
+        if "db_provider" in integration_results.get("integrations", {}):
+            db_int = integration_results["integrations"]["db_provider"]
+
+            # Find Ignition instances that will use databases
+            for client in db_int.get("clients", []):
+                if client["service_id"] == "ignition" and client.get("auto_register"):
+                    # Get compatible databases for this Ignition instance
+                    for provider in client.get("matched_providers", []):
+                        ignition_db_list.append({
+                            "type": provider["service_id"],
+                            "instance_name": provider["instance_name"],
+                            "config": provider["config"]
+                        })
+
+        if ignition_db_list:
+            readme_content += generate_ignition_db_readme_section(ignition_db_list)
+
+        # Add ntfy monitoring section if enabled
+        if global_settings.ntfy_enabled and global_settings.ntfy_topic:
+            readme_content += generate_ntfy_readme_section(
+                global_settings.ntfy_server,
+                global_settings.ntfy_topic
+            )
+
         readme_content += """
 ## Stopping the Stack
 
@@ -651,7 +900,11 @@ docker-compose down -v
         return {
             "docker_compose": compose_yaml,
             "env": env_content,
-            "readme": readme_content
+            "readme": readme_content,
+            "config_files": config_files,
+            "ntfy_enabled": global_settings.ntfy_enabled,
+            "ntfy_server": global_settings.ntfy_server,
+            "ntfy_topic": global_settings.ntfy_topic
         }
 
     except Exception as e:
@@ -673,12 +926,77 @@ def download_stack(stack_config: StackConfig):
             zip_file.writestr(".env", generated["env"])
             zip_file.writestr("README.md", generated["readme"])
 
+            # Add generated config files from integrations
+            for file_path, content in generated.get("config_files", {}).items():
+                zip_file.writestr(file_path, content)
+
             # Create directory structure placeholders
             zip_file.writestr("configs/.gitkeep", "")
             zip_file.writestr("scripts/.gitkeep", "")
 
-            # Generate Ignition initialization script if Ignition is present
+            # Add ntfy monitoring script if enabled
+            global_settings = stack_config.global_settings or GlobalSettings()
+            if global_settings.ntfy_enabled and global_settings.ntfy_topic:
+                monitor_script = generate_ntfy_monitor_script(
+                    ntfy_server=global_settings.ntfy_server,
+                    ntfy_topic=global_settings.ntfy_topic,
+                    stack_name="iiot-stack"
+                )
+                zip_file.writestr("monitor.sh", monitor_script)
+
+            # Generate Ignition database auto-registration script if applicable
             has_ignition = any(inst.app_id == "ignition" for inst in stack_config.instances)
+            has_databases = any(inst.app_id in ["postgres", "mariadb", "mssql"] for inst in stack_config.instances)
+
+            if has_ignition and has_databases:
+                # Detect integrations to find database connections
+                instances_for_detection = [
+                    {
+                        "app_id": inst.app_id,
+                        "instance_name": inst.instance_name,
+                        "config": inst.config
+                    }
+                    for inst in stack_config.instances
+                ]
+                engine = get_integration_engine()
+                detection = engine.detect_integrations(instances_for_detection)
+
+                if "db_provider" in detection.get("integrations", {}):
+                    db_int = detection["integrations"]["db_provider"]
+
+                    # Find databases that should be auto-registered with Ignition
+                    ignition_dbs = []
+                    for client in db_int.get("clients", []):
+                        if client["service_id"] == "ignition":
+                            for provider in client.get("matched_providers", []):
+                                ignition_dbs.append({
+                                    "type": provider["service_id"],
+                                    "instance_name": provider["instance_name"],
+                                    "config": provider["config"]
+                                })
+
+                    if ignition_dbs:
+                        # Get Ignition admin credentials
+                        ignition_inst = next((inst for inst in stack_config.instances if inst.app_id == "ignition"), None)
+                        if ignition_inst:
+                            ignition_host = ignition_inst.instance_name
+                            ignition_port = ignition_inst.config.get("http_port", 8088)
+                            admin_username = ignition_inst.config.get("admin_username", "admin")
+                            admin_password = ignition_inst.config.get("admin_password", "password")
+
+                            # Generate the registration script
+                            db_registration_script = generate_ignition_db_registration_script(
+                                ignition_host=ignition_host,
+                                ignition_port=ignition_port,
+                                admin_username=admin_username,
+                                admin_password=admin_password,
+                                databases=ignition_dbs
+                            )
+
+                            zip_file.writestr("scripts/register_databases.py", db_registration_script)
+                            zip_file.writestr("scripts/requirements.txt", generate_requirements_file())
+
+            # Generate Ignition initialization script if Ignition is present
             has_postgres = any(inst.app_id == "postgres" for inst in stack_config.instances)
 
             if has_ignition:
@@ -934,28 +1252,16 @@ pause
 
             # Generate Traefik configuration files if Traefik is present
             if has_traefik:
-                # Main Traefik configuration
-                traefik_config = """api:
-  dashboard: true
-  insecure: true
+                # Get integration settings for Traefik
+                integration_settings = stack_config.integration_settings or IntegrationSettings()
+                enable_https = integration_settings.reverse_proxy.get("enable_https", False)
+                letsencrypt_email = integration_settings.reverse_proxy.get("letsencrypt_email", "")
 
-entryPoints:
-  web:
-    address: ":80"
-  websecure:
-    address: ":443"
-
-providers:
-  docker:
-    exposedByDefault: false
-    network: iiot-network
-  file:
-    directory: /etc/traefik/dynamic
-    watch: true
-
-log:
-  level: INFO
-"""
+                # Main Traefik configuration using config generator
+                traefik_config = generate_traefik_static_config(
+                    enable_https=enable_https,
+                    letsencrypt_email=letsencrypt_email
+                )
                 zip_file.writestr("configs/traefik/traefik.yml", traefik_config)
 
                 # Define web services and their ports (must match the docker-compose generation)
@@ -977,6 +1283,7 @@ log:
                 }
 
                 # Generate dynamic routing for each web service
+                services_for_traefik = []
                 for instance in stack_config.instances:
                     if instance.app_id != "traefik" and instance.app_id in web_service_ports:
                         service_name = instance.instance_name
@@ -986,23 +1293,22 @@ log:
                         subdomain = service_name.split('-')[0] if '-' in service_name else service_name
 
                         # Get the port using the port function
-                        port = web_service_ports[instance.app_id](config)
+                        port = int(web_service_ports[instance.app_id](config))
 
-                        dynamic_config = f"""http:
-  routers:
-    {service_name}:
-      rule: "Host(`{subdomain}.localhost`)"
-      service: {service_name}
-      entryPoints:
-        - web
+                        services_for_traefik.append({
+                            "instance_name": service_name,
+                            "subdomain": subdomain,
+                            "port": port
+                        })
 
-  services:
-    {service_name}:
-      loadBalancer:
-        servers:
-          - url: "http://{service_name}:{port}"
-"""
-                        zip_file.writestr(f"configs/traefik/dynamic/{service_name}.yml", dynamic_config)
+                # Generate dynamic config using config generator
+                base_domain = integration_settings.reverse_proxy.get("base_domain", "localhost")
+                dynamic_config = generate_traefik_dynamic_config(
+                    services=services_for_traefik,
+                    domain=base_domain,
+                    enable_https=enable_https
+                )
+                zip_file.writestr("configs/traefik/dynamic/services.yml", dynamic_config)
 
             # Add uploaded module files for Ignition instances
             for instance in stack_config.instances:

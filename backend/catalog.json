@@ -1200,7 +1200,7 @@
       "integrations": [
         "visualization"
       ],
-      "enabled": false,
+      "enabled": true,
       "planned": true
     },
     {
