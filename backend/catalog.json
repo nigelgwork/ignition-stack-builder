@@ -611,18 +611,14 @@
         "admin_username": {
           "type": "text",
           "default": "admin",
-          "label": "Admin Username"
+          "label": "Master Admin Username",
+          "description": "Admin username for the master realm"
         },
         "admin_password": {
           "type": "password",
           "default": "admin",
-          "label": "Admin Password"
-        },
-        "users": {
-          "type": "user_list",
-          "default": [],
-          "label": "Realm Users",
-          "description": "Users to be created in the Keycloak realm"
+          "label": "Master Admin Password",
+          "description": "Admin password for the master realm"
         }
       },
       "integrations": [

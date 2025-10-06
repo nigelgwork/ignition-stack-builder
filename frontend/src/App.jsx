@@ -29,7 +29,8 @@ function App() {
     },
     oauth: {
       realm_name: 'iiot',
-      auto_configure_services: true
+      auto_configure_services: true,
+      realm_users: []
     },
     database: {
       auto_register: true
@@ -978,8 +979,8 @@ function App() {
 
                                       return (
                                         <>
-                                          <div className="config-row" style={{ gridColumn: '1 / -1', marginTop: '1rem', paddingTop: '1rem', borderTop: '2px solid var(--accent-color)' }}>
-                                            <label style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--accent-color)' }}>
+                                          <div className="section-header">
+                                            <label>
                                               {integrationInfo.type === 'mqtt_broker' && '📡 MQTT Broker Settings'}
                                               {integrationInfo.type === 'reverse_proxy' && '🌐 Reverse Proxy Settings'}
                                               {integrationInfo.type === 'oauth_provider' && '🔐 OAuth/SSO Settings'}
@@ -1038,13 +1039,11 @@ function App() {
                                                   placeholder="Enter password"
                                                 />
                                               </div>
-                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
-                                                  Will be configured for: {integrationInfo.data.clients.map(c => {
-                                                    const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
-                                                    return inst?.config?.name || c.instance_name
-                                                  }).join(', ')}
-                                                </small>
+                                              <div className="info-text">
+                                                Will be configured for: {integrationInfo.data.clients.map(c => {
+                                                  const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
+                                                  return inst?.config?.name || c.instance_name
+                                                }).join(', ')}
                                               </div>
                                             </>
                                           )}
@@ -1089,10 +1088,8 @@ function App() {
                                                   />
                                                 </div>
                                               )}
-                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
-                                                  Routing for: {integrationInfo.data.targets.map(t => t.default_subdomain).join(', ')}
-                                                </small>
+                                              <div className="info-text">
+                                                Routing for: {integrationInfo.data.targets.map(t => t.default_subdomain).join(', ')}
                                               </div>
                                             </>
                                           )}
@@ -1123,13 +1120,202 @@ function App() {
                                                   })}
                                                 />
                                               </div>
-                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
-                                                  Will configure OAuth for: {integrationInfo.data.clients.map(c => {
-                                                    const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
-                                                    return inst?.config?.name || c.service_id
-                                                  }).join(', ')}
-                                                </small>
+
+                                              {/* Realm User Management */}
+                                              <div className="user-list-container">
+                                                <div className="user-list-header">
+                                                  <button
+                                                    type="button"
+                                                    className="add-user-btn"
+                                                    onClick={() => {
+                                                      const newUser = {
+                                                        username: '',
+                                                        password: '',
+                                                        email: '',
+                                                        firstName: '',
+                                                        lastName: '',
+                                                        temporary: true
+                                                      }
+                                                      setIntegrationSettings({
+                                                        ...integrationSettings,
+                                                        oauth: {...integrationSettings.oauth, realm_users: [...integrationSettings.oauth.realm_users, newUser]}
+                                                      })
+                                                    }}
+                                                  >
+                                                    + Add User
+                                                  </button>
+                                                  <div className="csv-import-wrapper">
+                                                    <label htmlFor="csv-import-oauth" className="csv-import-btn">
+                                                      📄 Import CSV
+                                                    </label>
+                                                    <input
+                                                      id="csv-import-oauth"
+                                                      type="file"
+                                                      accept=".csv"
+                                                      onChange={(e) => {
+                                                        const file = e.target.files[0]
+                                                        if (!file) return
+
+                                                        const reader = new FileReader()
+                                                        reader.onload = (event) => {
+                                                          const csv = event.target.result
+                                                          const lines = csv.split('\n').filter(line => line.trim())
+
+                                                          // Skip header row if it exists
+                                                          const hasHeader = lines[0].toLowerCase().includes('username')
+                                                          const dataLines = hasHeader ? lines.slice(1) : lines
+
+                                                          const importedUsers = dataLines.map(line => {
+                                                            const [username, password, email, firstName, lastName] = line.split(',').map(v => v.trim())
+                                                            return {
+                                                              username: username || '',
+                                                              password: password || '',
+                                                              email: email || '',
+                                                              firstName: firstName || '',
+                                                              lastName: lastName || '',
+                                                              temporary: true
+                                                            }
+                                                          }).filter(user => user.username && user.password)
+
+                                                          setIntegrationSettings({
+                                                            ...integrationSettings,
+                                                            oauth: {...integrationSettings.oauth, realm_users: [...integrationSettings.oauth.realm_users, ...importedUsers]}
+                                                          })
+                                                        }
+                                                        reader.readAsText(file)
+                                                        e.target.value = '' // Reset input
+                                                      }}
+                                                      style={{ display: 'none' }}
+                                                    />
+                                                  </div>
+                                                </div>
+
+                                                {integrationSettings.oauth.realm_users.length > 0 && (
+                                                  <div className="user-list">
+                                                    {integrationSettings.oauth.realm_users.map((user, index) => (
+                                                      <div key={index} className="user-item">
+                                                        <div className="user-fields">
+                                                          <input
+                                                            type="text"
+                                                            placeholder="Username *"
+                                                            value={user.username}
+                                                            onChange={(e) => {
+                                                              const newUsers = integrationSettings.oauth.realm_users.map((u, i) =>
+                                                                i === index ? { ...u, username: e.target.value } : u
+                                                              )
+                                                              setIntegrationSettings({
+                                                                ...integrationSettings,
+                                                                oauth: {...integrationSettings.oauth, realm_users: newUsers}
+                                                              })
+                                                            }}
+                                                            className="user-input"
+                                                          />
+                                                          <input
+                                                            type="password"
+                                                            placeholder="Password *"
+                                                            value={user.password}
+                                                            onChange={(e) => {
+                                                              const newUsers = integrationSettings.oauth.realm_users.map((u, i) =>
+                                                                i === index ? { ...u, password: e.target.value } : u
+                                                              )
+                                                              setIntegrationSettings({
+                                                                ...integrationSettings,
+                                                                oauth: {...integrationSettings.oauth, realm_users: newUsers}
+                                                              })
+                                                            }}
+                                                            className="user-input"
+                                                          />
+                                                          <input
+                                                            type="email"
+                                                            placeholder="Email"
+                                                            value={user.email}
+                                                            onChange={(e) => {
+                                                              const newUsers = integrationSettings.oauth.realm_users.map((u, i) =>
+                                                                i === index ? { ...u, email: e.target.value } : u
+                                                              )
+                                                              setIntegrationSettings({
+                                                                ...integrationSettings,
+                                                                oauth: {...integrationSettings.oauth, realm_users: newUsers}
+                                                              })
+                                                            }}
+                                                            className="user-input"
+                                                          />
+                                                          <input
+                                                            type="text"
+                                                            placeholder="First Name"
+                                                            value={user.firstName}
+                                                            onChange={(e) => {
+                                                              const newUsers = integrationSettings.oauth.realm_users.map((u, i) =>
+                                                                i === index ? { ...u, firstName: e.target.value } : u
+                                                              )
+                                                              setIntegrationSettings({
+                                                                ...integrationSettings,
+                                                                oauth: {...integrationSettings.oauth, realm_users: newUsers}
+                                                              })
+                                                            }}
+                                                            className="user-input"
+                                                          />
+                                                          <input
+                                                            type="text"
+                                                            placeholder="Last Name"
+                                                            value={user.lastName}
+                                                            onChange={(e) => {
+                                                              const newUsers = integrationSettings.oauth.realm_users.map((u, i) =>
+                                                                i === index ? { ...u, lastName: e.target.value } : u
+                                                              )
+                                                              setIntegrationSettings({
+                                                                ...integrationSettings,
+                                                                oauth: {...integrationSettings.oauth, realm_users: newUsers}
+                                                              })
+                                                            }}
+                                                            className="user-input"
+                                                          />
+                                                          <label className="user-temp-checkbox">
+                                                            <input
+                                                              type="checkbox"
+                                                              checked={user.temporary}
+                                                              onChange={(e) => {
+                                                                const newUsers = integrationSettings.oauth.realm_users.map((u, i) =>
+                                                                  i === index ? { ...u, temporary: e.target.checked } : u
+                                                                )
+                                                                setIntegrationSettings({
+                                                                  ...integrationSettings,
+                                                                  oauth: {...integrationSettings.oauth, realm_users: newUsers}
+                                                                })
+                                                              }}
+                                                            />
+                                                            <span>Temp</span>
+                                                          </label>
+                                                        </div>
+                                                        <button
+                                                          type="button"
+                                                          className="remove-user-btn"
+                                                          onClick={() => {
+                                                            const newUsers = integrationSettings.oauth.realm_users.filter((_, i) => i !== index)
+                                                            setIntegrationSettings({
+                                                              ...integrationSettings,
+                                                              oauth: {...integrationSettings.oauth, realm_users: newUsers}
+                                                            })
+                                                          }}
+                                                        >
+                                                          ✕
+                                                        </button>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+
+                                                <p className="csv-format-help">
+                                                  CSV format: username,password,email,firstName,lastName<br/>
+                                                  Required fields: username, password
+                                                </p>
+                                              </div>
+
+                                              <div className="info-text">
+                                                Will configure OAuth for: {integrationInfo.data.clients.map(c => {
+                                                  const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
+                                                  return inst?.config?.name || c.service_id
+                                                }).join(', ')}
                                               </div>
                                             </>
                                           )}
@@ -1160,13 +1346,11 @@ function App() {
                                                   })}
                                                 />
                                               </div>
-                                              <div className="config-row" style={{ gridColumn: '1 / -1' }}>
-                                                <small style={{ color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
-                                                  Will be used by: {integrationInfo.data.clients.map(c => {
-                                                    const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
-                                                    return inst?.config?.name || c.instance_name
-                                                  }).join(', ')}
-                                                </small>
+                                              <div className="info-text">
+                                                Will be used by: {integrationInfo.data.clients.map(c => {
+                                                  const inst = selectedInstances.find(i => i.instance_name === c.instance_name)
+                                                  return inst?.config?.name || c.instance_name
+                                                }).join(', ')}
                                               </div>
                                             </>
                                           )}
@@ -1177,8 +1361,8 @@ function App() {
                                     {/* Dynamic Integration Options for Ignition */}
                                     {app.id === 'ignition' && getAvailableDatabases().length > 0 && (
                                       <>
-                                        <div className="config-row" style={{ gridColumn: '1 / -1', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)' }}>
-                                          <label style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--accent-color)' }}>Database Integration</label>
+                                        <div className="section-header" style={{ borderTop: '1px dashed var(--border-color)' }}>
+                                          <label>Database Integration</label>
                                         </div>
                                         <div className="config-row">
                                           <label title="Automatically register database in Ignition">Auto-register Database:</label>
