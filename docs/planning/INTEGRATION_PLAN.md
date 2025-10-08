@@ -328,7 +328,6 @@ If Ignition has MQTT Transmission module:
 2. **PostgreSQL** (if selected)
 3. **MariaDB** (if selected)
 4. **MSSQL** (if selected)
-5. **Loki** (if selected for logs)
 
 **Implementation Strategy**:
 
@@ -356,12 +355,6 @@ datasources:
     jsonData:
       sslmode: disable
       postgresVersion: 1600
-
-  - name: Loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
-    editable: false
 ```
 
 **Mount in docker-compose**:
@@ -480,30 +473,6 @@ if 'guacamole' in selected_services:
 
 ---
 
-### 9. **Logging Integration** (Loki + Promtail)
-
-**When Loki Selected**: Collect logs from all containers
-
-**Implementation**:
-1. Add Promtail sidecar (auto-added when Loki selected)
-2. Configure Promtail to scrape Docker logs
-3. Send to Loki
-4. If Grafana also selected: add Loki datasource automatically
-
-**Promtail Config**:
-```yaml
-promtail:
-  image: grafana/promtail:latest
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - ./configs/promtail/config.yml:/etc/promtail/config.yml
-  command: -config.file=/etc/promtail/config.yml
-  depends_on:
-    - loki
-```
-
----
-
 ## 🏗️ Implementation Roadmap
 
 ### Phase 1: Foundation (Week 1-2)
@@ -558,8 +527,6 @@ promtail:
 - [ ] **Vault secrets management**
   - Secret initialization scripts
   - Secret injection patterns
-- [ ] **Logging integration**
-  - Loki + Promtail auto-configuration
 
 ### Phase 6: Testing & Documentation (Week 9-10)
 - [ ] **Integration testing matrix**

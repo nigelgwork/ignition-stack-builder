@@ -104,7 +104,7 @@ Per user feedback: "Integration settings should not be in their own section but 
 1. **Configuration Generators** (`config_generator.py` - 416 lines)
    - `generate_mosquitto_config()`: MQTT broker with TLS, auth, persistence
    - `generate_emqx_config()`: EMQX authentication settings
-   - `generate_grafana_datasources()`: Auto-provision Prometheus, PostgreSQL, MariaDB, InfluxDB, Loki
+   - `generate_grafana_datasources()`: Auto-provision Prometheus, PostgreSQL, MariaDB, InfluxDB
    - `generate_traefik_static_config()`: Traefik with HTTPS, Let's Encrypt certificates
    - `generate_traefik_dynamic_config()`: Dynamic routing with custom domains
    - `generate_oauth_env_vars()`: OAuth environment variables for Grafana, Portainer, n8n
@@ -172,11 +172,10 @@ iiot-stack.zip
 **Remaining Integration Types**:
 1. **Nginx Proxy Manager** - API-based proxy host configuration (alternative to Traefik)
 2. **Vault Secrets Management** - Secret initialization and injection
-3. **Loki + Promtail** - Log aggregation and collection
-4. **Prometheus Service Discovery** - Automatic scrape configuration
-5. **Advanced MQTT** - TLS certificate generation, ACL configuration
+3. **Prometheus Service Discovery** - Automatic scrape configuration
+4. **Advanced MQTT** - TLS certificate generation, ACL configuration
 
-**Status**: Phase 2A/2B covers 78% of planned integrations (7/9 types)
+**Status**: Phase 2A/2B covers 88% of planned integrations (7/8 types)
 
 ### ⏳ Immediate Next Steps (When Resuming)
 
@@ -216,7 +215,6 @@ iiot-stack.zip
 
 **Phase 2B: Additional Integration Types**
 - Secrets Management (Vault)
-- Log Aggregation (Loki + Promtail)
 - Metrics Collection (Prometheus + Grafana)
 - Backup/Restore (Duplicati)
 
@@ -454,7 +452,7 @@ When resuming work:
 **Code Status**: Production-Ready, Phase 2A/2B Complete
 **Blockers**: None
 **Ready for**: End-to-End Testing, Phase 2C Implementation, or Production Deployment
-**Phase 2 Completion**: 78% (7/9 integration types implemented)
+**Phase 2 Completion**: 88% (7/8 integration types implemented)
 
 ---
 

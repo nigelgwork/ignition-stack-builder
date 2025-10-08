@@ -49,6 +49,7 @@ generated-stacks/
 htmlcov/
 .coverage
 *.cover
+tests/temp/
 
 # Claude settings
 .claude/settings.local.json

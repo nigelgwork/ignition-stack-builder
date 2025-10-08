@@ -37,7 +37,7 @@ Phase 2 focuses on **intelligent auto-configuration** between containers. The go
 **3. Grafana Datasource Auto-Provisioning** ✅
 - Location: `backend/config_generator.py:78-148`
 - Function: `generate_grafana_datasources()`
-- Supports: Prometheus, PostgreSQL, MariaDB, InfluxDB, Loki
+- Supports: Prometheus, PostgreSQL, MariaDB, InfluxDB
 - Generates: `configs/grafana/provisioning/datasources/auto.yaml`
 - Applied in: `backend/main.py:640-660`
 - **Test Result**: ✅ Verified - PostgreSQL datasource auto-configured for Grafana
@@ -281,12 +281,7 @@ curl -X POST /download -d '{
 - Secret injection into services
 - Dynamic credential rotation
 
-**4. Loki + Promtail Logging** ⏳
-- Log aggregation setup
-- Promtail sidecar configuration
-- Grafana Loki datasource
-
-**5. Prometheus Metrics** ⏳
+**4. Prometheus Metrics** ⏳
 - Service discovery configuration
 - Scrape config generation
 - Alertmanager setup
@@ -389,14 +384,13 @@ Total:                       6,157 lines
 ### Short-term (Next Session)
 6. ⏳ Implement Nginx Proxy Manager integration
 7. ⏳ Add Vault secrets management
-8. ⏳ Implement Loki + Promtail logging
-9. ⏳ Add Prometheus service discovery
+8. ⏳ Add Prometheus service discovery
 
 ### Long-term (Phase 3)
-10. ⏳ Create stack templates (pre-configured bundles)
-11. ⏳ Implement health check verification
-12. ⏳ Add integration testing suite
-13. ⏳ Create integration troubleshooting guide
+9. ⏳ Create stack templates (pre-configured bundles)
+10. ⏳ Implement health check verification
+11. ⏳ Add integration testing suite
+12. ⏳ Create integration troubleshooting guide
 
 ---
 

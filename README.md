@@ -1,5 +1,8 @@
 # 🏗️ Ignition Stack Builder
 
+> **🚧 Alpha Version - Ready for User Testing**
+> This project is currently in **alpha** and ready for user testing and feedback. We welcome your input to help improve the platform! Please report any issues or suggestions via [GitHub Issues](https://github.com/yourusername/ignition-stack-builder/issues).
+
 ## 📌 Overview
 The **Ignition Stack Builder** is a web-based tool that allows users to **design and deploy custom industrial IoT (IIoT) Docker stacks**.
 It provides a simple **web UI** where you can:
@@ -77,7 +80,6 @@ The system is divided into three main components:
 ### Monitoring & Observability
 - ✅ **Prometheus** – Metrics collection and alerting
 - ✅ **Grafana** – Visualization and dashboards
-- ✅ **Loki** – Log aggregation system
 - ✅ **Dozzle** – Real-time Docker log viewer
 
 ### Authentication & Identity
@@ -239,7 +241,7 @@ The `.env` file contains:
 - ✅ **Databases**: PostgreSQL, MariaDB, MSSQL, SQLite (with pgAdmin and phpMyAdmin options)
 - ✅ **Messaging**: EMQX, Mosquitto
 - ✅ **Automation**: Node-RED, n8n
-- ✅ **Monitoring**: Prometheus, Grafana, Loki, Dozzle
+- ✅ **Monitoring**: Prometheus, Grafana, Dozzle
 - ✅ **Authentication**: Keycloak, Authentik, Authelia
 - ✅ **DevOps**: Portainer, WhatUpDocker, MailHog
 - ✅ **Security**: HashiCorp Vault

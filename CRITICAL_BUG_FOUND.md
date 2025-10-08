@@ -174,7 +174,6 @@ Services that need updates:
 - grafana
 - prometheus
 - influxdb
-- loki
 - mosquitto
 - emqx
 - node-red

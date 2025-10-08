@@ -129,7 +129,7 @@ tests/
 |---------|------------|----------|---------|
 | T301 | Basic SCADA | Ignition + PostgreSQL + Grafana | Common IIoT setup |
 | T302 | Full IIoT | Ignition + Postgres + MQTT + Node-RED + Grafana | Complete solution |
-| T303 | Monitoring Stack | Grafana + Prometheus + Loki + Traefik | Observability platform |
+| T303 | Monitoring Stack | Grafana + Prometheus + Traefik | Observability platform |
 | T304 | Secure Stack | Ignition + Postgres + Keycloak + Traefik HTTPS | Production security |
 
 **Success Criteria**:

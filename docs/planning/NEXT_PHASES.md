@@ -48,7 +48,7 @@ This phase focuses on **end-to-end validation** - making sure every combination 
 3. **Ignition + MSSQL**
 4. **Traefik + Grafana + Prometheus**
 5. **Keycloak + Grafana (OAuth)**
-6. **Full monitoring stack** (Grafana + Prometheus + Loki)
+6. **Full monitoring stack** (Grafana + Prometheus)
 7. **MQTT stack** (Mosquitto/EMQX + Node-RED)
 8. **Complete IIoT stack** (Ignition + DB + MQTT + Grafana)
 
@@ -223,7 +223,7 @@ def check_postgres(container_name="postgres"):
 **Templates to create**:
 - `scada_basic` - Ignition + PostgreSQL
 - `scada_full` - Ignition + PostgreSQL + MQTT + Grafana
-- `monitoring` - Grafana + Prometheus + Loki
+- `monitoring` - Grafana + Prometheus
 - `development` - All services for testing
 
 **UI**: Add "Load Template" button that populates services
@@ -328,17 +328,12 @@ if (grafana && !prometheus && !database) {
 - Secret injection into services
 - Dynamic credential rotation
 
-### 5.3 Loki + Promtail Logging
-- Log aggregation setup
-- Promtail sidecar configuration
-- Grafana Loki datasource
-
-### 5.4 Prometheus Service Discovery
+### 5.3 Prometheus Service Discovery
 - Automatic scrape configuration
 - Target discovery from containers
 - Alertmanager setup
 
-### 5.5 Advanced MQTT Features
+### 5.4 Advanced MQTT Features
 - TLS certificate generation
 - ACL (Access Control List) configuration
 - MQTT bridge for multi-broker
