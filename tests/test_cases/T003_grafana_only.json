@@ -1,0 +1,16 @@
+{
+  "instances": [
+    {
+      "app_id": "grafana",
+      "instance_name": "grafana",
+      "config": {
+        "version": "latest",
+        "port": 3000
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  }
+}

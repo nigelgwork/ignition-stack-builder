@@ -1,0 +1,32 @@
+{
+  "instances": [
+    {
+      "app_id": "grafana",
+      "instance_name": "grafana",
+      "config": {
+        "version": "latest",
+        "http_port": 3000,
+        "admin_username": "admin",
+        "admin_password": "admin"
+      }
+    },
+    {
+      "app_id": "prometheus",
+      "instance_name": "prometheus",
+      "config": {
+        "version": "latest",
+        "port": 9090
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  },
+  "integration_settings": {
+    "db_provider": {
+      "enabled": true,
+      "auto_register": true
+    }
+  }
+}

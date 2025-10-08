@@ -1,0 +1,18 @@
+{
+  "instances": [
+    {
+      "app_id": "keycloak",
+      "instance_name": "keycloak",
+      "config": {
+        "version": "latest",
+        "port": 8180,
+        "admin_username": "admin",
+        "admin_password": "admin"
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  }
+}

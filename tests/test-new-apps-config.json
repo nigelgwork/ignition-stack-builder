@@ -1,0 +1,77 @@
+{
+  "instances": [
+    {
+      "app_id": "gitea",
+      "instance_name": "gitea",
+      "config": {
+        "name": "gitea",
+        "version": "latest",
+        "http_port": 3000,
+        "ssh_port": 2222
+      }
+    },
+    {
+      "app_id": "n8n",
+      "instance_name": "n8n",
+      "config": {
+        "name": "n8n",
+        "version": "latest",
+        "port": 5678,
+        "username": "admin",
+        "password": "admin123"
+      }
+    },
+    {
+      "app_id": "vault",
+      "instance_name": "vault",
+      "config": {
+        "name": "vault",
+        "version": "latest",
+        "port": 8200,
+        "root_token": "dev-root-token"
+      }
+    },
+    {
+      "app_id": "mosquitto",
+      "instance_name": "mosquitto",
+      "config": {
+        "name": "mosquitto",
+        "version": "latest",
+        "mqtt_port": 1883,
+        "websocket_port": 9001
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "Australia/Adelaide",
+    "restart_policy": "unless-stopped",
+    "ntfy_enabled": false,
+    "ntfy_server": "https://ntfy.sh",
+    "ntfy_topic": ""
+  },
+  "integration_settings": {
+    "reverse_proxy": {
+      "base_domain": "localhost",
+      "enable_https": false,
+      "letsencrypt_email": ""
+    },
+    "mqtt": {
+      "enable_tls": false,
+      "username": "",
+      "password": "",
+      "tls_port": 8883
+    },
+    "oauth": {
+      "realm_name": "iiot",
+      "auto_configure_services": true,
+      "realm_users": []
+    },
+    "database": {
+      "auto_register": true
+    },
+    "email": {
+      "from_address": "noreply@iiot.local",
+      "auto_configure_services": true
+    }
+  }
+}

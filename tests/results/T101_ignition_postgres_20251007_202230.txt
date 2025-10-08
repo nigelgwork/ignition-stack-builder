@@ -1,0 +1,10 @@
+Test: T101_ignition_postgres
+Status: PASS
+Timestamp: 2025-10-07 20:20:27
+Duration: 123s
+Containers: 2/2
+
+Container Status:
+NAME       IMAGE                                 COMMAND                  SERVICE    CREATED         STATUS                   PORTS
+ignition   inductiveautomation/ignition:latest   "docker-entrypoint.sh"   ignition   2 minutes ago   Up 2 minutes (healthy)   0.0.0.0:8043->8043/tcp, :::8043->8043/tcp, 0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
+postgres   postgres:latest                       "docker-entrypoint.s…"   postgres   2 minutes ago   Up 2 minutes             0.0.0.0:5432->5432/tcp, :::5432->5432/tcp

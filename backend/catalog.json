@@ -42,7 +42,7 @@
           "IGNITION_MEMORY_INIT": "512m"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/usr/local/bin/ignition/data"
+          "{instance_name}-data:/usr/local/bin/ignition/data"
         ]
       },
       "configurable_options": {
@@ -179,7 +179,15 @@
         },
         "modules_83": {
           "type": "multiselect",
-          "default": ["perspective", "historian-core", "alarm-notification", "opc-ua", "symbol-factory", "enterprise-administration", "event-streams"],
+          "default": [
+            "perspective",
+            "historian-core",
+            "alarm-notification",
+            "opc-ua",
+            "symbol-factory",
+            "enterprise-administration",
+            "event-streams"
+          ],
           "label": "Modules (v8.3+)",
           "version_constraint": "8.3",
           "description": "Built-in modules for Ignition 8.3 and later",
@@ -334,7 +342,7 @@
           "POSTGRES_PASSWORD": "postgres"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/var/lib/postgresql/data"
+          "{instance_name}-data:/var/lib/postgresql/data"
         ]
       },
       "configurable_options": {
@@ -403,7 +411,7 @@
           "PGADMIN_DEFAULT_PASSWORD": "admin"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/var/lib/pgadmin"
+          "{instance_name}-data:/var/lib/pgadmin"
         ]
       },
       "configurable_options": {
@@ -459,8 +467,8 @@
         "environment": {},
         "volumes": [
           "/var/run/docker.sock:/var/run/docker.sock:ro",
-          "./configs/traefik/traefik.yml:/etc/traefik/traefik.yml",
-          "./configs/traefik/dynamic:/etc/traefik/dynamic"
+          "./configs/traefik/traefik.yml:/etc/traefik/traefik.yml:ro",
+          "./configs/traefik/dynamic:/etc/traefik/dynamic:ro"
         ]
       },
       "configurable_options": {
@@ -520,8 +528,8 @@
           "DB_SQLITE_FILE": "/data/database.sqlite"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/data",
-          "./configs/{instance_name}/letsencrypt:/etc/letsencrypt"
+          "{instance_name}-data:/data",
+          "{instance_name}-letsencrypt:/etc/letsencrypt"
         ]
       },
       "configurable_options": {
@@ -588,7 +596,7 @@
         },
         "command": "start-dev",
         "volumes": [
-          "./configs/keycloak/data:/opt/keycloak/data"
+          "keycloak-data:/opt/keycloak/data"
         ]
       },
       "configurable_options": {
@@ -653,7 +661,7 @@
           "MYSQL_PASSWORD": "mariadb"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/var/lib/mysql"
+          "{instance_name}-data:/var/lib/mysql"
         ]
       },
       "configurable_options": {
@@ -767,7 +775,7 @@
           "MSSQL_PID": "Developer"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/var/opt/mssql"
+          "{instance_name}-data:/var/opt/mssql"
         ]
       },
       "configurable_options": {
@@ -837,8 +845,8 @@
           "EMQX_HOST": "127.0.0.1"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/opt/emqx/data",
-          "./configs/{instance_name}/log:/opt/emqx/log"
+          "{instance_name}-data:/opt/emqx/data",
+          "{instance_name}-log:/opt/emqx/log"
         ]
       },
       "configurable_options": {
@@ -881,6 +889,7 @@
         "2.0",
         "1.6"
       ],
+      "enabled": true,
       "supports_multiple": false,
       "default_config": {
         "ports": [
@@ -889,9 +898,8 @@
         ],
         "environment": {},
         "volumes": [
-          "./configs/{instance_name}/config:/mosquitto/config",
-          "./configs/{instance_name}/data:/mosquitto/data",
-          "./configs/{instance_name}/log:/mosquitto/log"
+          "{instance_name}-data:/mosquitto/data",
+          "{instance_name}-log:/mosquitto/log"
         ]
       },
       "configurable_options": {
@@ -919,74 +927,7 @@
       },
       "integrations": [
         "mqtt_broker"
-      ],
-      "enabled": false
-    },
-    {
-      "id": "rabbitmq",
-      "name": "RabbitMQ",
-      "category": "Messaging & Brokers",
-      "description": "Message broker with AMQP support",
-      "image": "rabbitmq",
-      "default_version": "3-management",
-      "available_versions": [
-        "3-management",
-        "3.13-management",
-        "3.12-management",
-        "3.11-management"
-      ],
-      "supports_multiple": false,
-      "default_config": {
-        "ports": [
-          "5672:5672",
-          "15672:15672"
-        ],
-        "environment": {
-          "RABBITMQ_DEFAULT_USER": "admin",
-          "RABBITMQ_DEFAULT_PASS": "admin"
-        },
-        "volumes": [
-          "./configs/{instance_name}/data:/var/lib/rabbitmq"
-        ]
-      },
-      "configurable_options": {
-        "name": {
-          "type": "text",
-          "default": "rabbitmq",
-          "label": "Instance Name",
-          "description": "Custom name for this RabbitMQ instance"
-        },
-        "version": {
-          "type": "select",
-          "default": "3-management",
-          "label": "Version"
-        },
-        "amqp_port": {
-          "type": "number",
-          "default": 5672,
-          "label": "AMQP Port"
-        },
-        "management_port": {
-          "type": "number",
-          "default": 15672,
-          "label": "Management Port"
-        },
-        "username": {
-          "type": "text",
-          "default": "admin",
-          "label": "Username"
-        },
-        "password": {
-          "type": "password",
-          "default": "admin",
-          "label": "Password"
-        }
-      },
-      "integrations": [
-        "message_broker"
-      ],
-      "enabled": false,
-      "planned": true
+      ]
     },
     {
       "id": "nodered",
@@ -1008,7 +949,7 @@
         ],
         "environment": {},
         "volumes": [
-          "./configs/{instance_name}/data:/data"
+          "{instance_name}-data:/data"
         ]
       },
       "configurable_options": {
@@ -1057,7 +998,7 @@
           "N8N_BASIC_AUTH_PASSWORD": "admin"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/home/node/.n8n"
+          "{instance_name}-data:/home/node/.n8n"
         ]
       },
       "configurable_options": {
@@ -1091,7 +1032,7 @@
       "integrations": [
         "workflow_automation"
       ],
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "prometheus",
@@ -1106,6 +1047,7 @@
         "v2.53",
         "v2.52"
       ],
+      "enabled": true,
       "supports_multiple": false,
       "default_config": {
         "ports": [
@@ -1113,10 +1055,9 @@
         ],
         "environment": {},
         "volumes": [
-          "./configs/{instance_name}/prometheus.yml:/etc/prometheus/prometheus.yml",
-          "./configs/{instance_name}/data:/prometheus"
-        ],
-        "command": "--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus"
+          "./configs/{instance_name}/prometheus.yml:/etc/prometheus/prometheus.yml:ro",
+          "{instance_name}-data:/prometheus"
+        ]
       },
       "configurable_options": {
         "name": {
@@ -1139,7 +1080,6 @@
       "integrations": [
         "metrics_collector"
       ],
-      "enabled": false,
       "planned": true
     },
     {
@@ -1166,7 +1106,7 @@
           "GF_SECURITY_ADMIN_PASSWORD": "admin"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/var/lib/grafana"
+          "{instance_name}-data:/var/lib/grafana"
         ]
       },
       "configurable_options": {
@@ -1223,7 +1163,7 @@
         ],
         "environment": {},
         "volumes": [
-          "./configs/{instance_name}/data:/loki"
+          "{instance_name}-data:/loki"
         ]
       },
       "configurable_options": {
@@ -1320,8 +1260,8 @@
           "AUTHENTIK_ERROR_REPORTING__ENABLED": "true"
         },
         "volumes": [
-          "./configs/{instance_name}/media:/media",
-          "./configs/{instance_name}/custom-templates:/templates"
+          "{instance_name}-media:/media",
+          "{instance_name}-templates:/templates"
         ]
       },
       "configurable_options": {
@@ -1373,8 +1313,8 @@
         ],
         "environment": {},
         "volumes": [
-          "./configs/{instance_name}/configuration.yml:/config/configuration.yml",
-          "./configs/{instance_name}/data:/data"
+          "./configs/{instance_name}/configuration.yml:/config/configuration.yml:ro",
+          "{instance_name}-data:/data"
         ]
       },
       "configurable_options": {
@@ -1423,7 +1363,7 @@
         "environment": {},
         "volumes": [
           "/var/run/docker.sock:/var/run/docker.sock",
-          "./configs/{instance_name}/data:/data"
+          "{instance_name}-data:/data"
         ]
       },
       "configurable_options": {
@@ -1523,8 +1463,8 @@
           "VAULT_DEV_LISTEN_ADDRESS": "0.0.0.0:8200"
         },
         "volumes": [
-          "./configs/{instance_name}/data:/vault/file",
-          "./configs/{instance_name}/logs:/vault/logs"
+          "{instance_name}-data:/vault/file",
+          "{instance_name}-logs:/vault/logs"
         ],
         "cap_add": [
           "IPC_LOCK"
@@ -1556,7 +1496,7 @@
       "integrations": [
         "secrets_management"
       ],
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "guacamole",
@@ -1606,7 +1546,7 @@
       "integrations": [
         "remote_access"
       ],
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "mailhog",
@@ -1656,6 +1596,121 @@
         "email_testing"
       ],
       "enabled": true
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab",
+      "category": "Version Control",
+      "description": "Complete DevOps platform with Git, CI/CD, and container registry",
+      "image": "gitlab/gitlab-ce",
+      "default_version": "latest",
+      "available_versions": [
+        "latest",
+        "17.7.0-ce.0",
+        "17.6.0-ce.0",
+        "17.5.0-ce.0",
+        "16.11.0-ce.0"
+      ],
+      "supports_multiple": false,
+      "default_config": {
+        "ports": [
+          "8929:80",
+          "2224:22"
+        ],
+        "environment": {
+          "GITLAB_OMNIBUS_CONFIG": "external_url 'http://localhost:8929'"
+        },
+        "volumes": [
+          "{instance_name}-config:/etc/gitlab",
+          "{instance_name}-logs:/var/log/gitlab",
+          "{instance_name}-data:/var/opt/gitlab"
+        ]
+      },
+      "configurable_options": {
+        "name": {
+          "type": "text",
+          "default": "gitlab",
+          "label": "Instance Name",
+          "description": "Custom name for this GitLab instance"
+        },
+        "version": {
+          "type": "select",
+          "default": "latest",
+          "label": "Version"
+        },
+        "http_port": {
+          "type": "number",
+          "default": 8929,
+          "label": "HTTP Port"
+        },
+        "ssh_port": {
+          "type": "number",
+          "default": 2224,
+          "label": "SSH Port"
+        }
+      },
+      "integrations": [
+        "git_server",
+        "ci_cd"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "gitea",
+      "name": "Gitea",
+      "category": "Version Control",
+      "description": "Lightweight self-hosted Git service",
+      "image": "gitea/gitea",
+      "default_version": "latest",
+      "available_versions": [
+        "latest",
+        "1.22",
+        "1.21",
+        "1.20"
+      ],
+      "supports_multiple": false,
+      "default_config": {
+        "ports": [
+          "3000:3000",
+          "2222:22"
+        ],
+        "environment": {
+          "USER_UID": "1000",
+          "USER_GID": "1000"
+        },
+        "volumes": [
+          "{instance_name}-data:/data",
+          "/etc/timezone:/etc/timezone:ro",
+          "/etc/localtime:/etc/localtime:ro"
+        ]
+      },
+      "configurable_options": {
+        "name": {
+          "type": "text",
+          "default": "gitea",
+          "label": "Instance Name",
+          "description": "Custom name for this Gitea instance"
+        },
+        "version": {
+          "type": "select",
+          "default": "latest",
+          "label": "Version"
+        },
+        "http_port": {
+          "type": "number",
+          "default": 3000,
+          "label": "HTTP Port"
+        },
+        "ssh_port": {
+          "type": "number",
+          "default": 2222,
+          "label": "SSH Port"
+        }
+      },
+      "integrations": [
+        "git_server"
+      ],
+      "enabled": true
     }
   ],
   "categories": [
@@ -1668,6 +1723,7 @@
     "Monitoring & Observability",
     "DevOps Tools",
     "Security & Secrets",
-    "Remote Access"
+    "Remote Access",
+    "Version Control"
   ]
 }

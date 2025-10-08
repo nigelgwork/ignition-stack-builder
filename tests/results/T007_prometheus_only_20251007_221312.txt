@@ -1,0 +1,9 @@
+Test: T007_prometheus_only
+Status: PASS
+Timestamp: 2025-10-07 22:12:10
+Duration: 62s
+Containers: 1/1
+
+Container Status:
+NAME         IMAGE                    COMMAND                  SERVICE      CREATED              STATUS              PORTS
+prometheus   prom/prometheus:latest   "/bin/prometheus --c…"   prometheus   About a minute ago   Up About a minute   0.0.0.0:9090->9090/tcp, :::9090->9090/tcp

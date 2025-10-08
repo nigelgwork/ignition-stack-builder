@@ -1,0 +1,9 @@
+Test: T002_ignition_only
+Status: PASS
+Timestamp: 2025-10-07 20:12:53
+Duration: 122s
+Containers: 1/1
+
+Container Status:
+NAME       IMAGE                                 COMMAND                  SERVICE    CREATED         STATUS                   PORTS
+ignition   inductiveautomation/ignition:latest   "docker-entrypoint.sh"   ignition   2 minutes ago   Up 2 minutes (healthy)   0.0.0.0:8043->8043/tcp, :::8043->8043/tcp, 0.0.0.0:8088->8088/tcp, :::8088->8088/tcp

@@ -6,6 +6,20 @@ from typing import Dict, List, Any, Optional
 import yaml
 
 
+def generate_prometheus_config() -> str:
+    """Generate minimal Prometheus configuration file"""
+    config = """global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+"""
+    return config
+
+
 def generate_mosquitto_config(username: str = "", password: str = "", enable_tls: bool = False,
                                 tls_port: int = 8883) -> str:
     """Generate Mosquitto configuration file"""

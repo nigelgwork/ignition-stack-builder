@@ -40,3 +40,15 @@ backend/.env
 # Generated stacks
 generated-stacks/
 *.zip
+
+# Testing artifacts
+/tmp/
+*.tmp
+*.bak
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+
+# Claude settings
+.claude/settings.local.json

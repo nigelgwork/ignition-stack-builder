@@ -67,6 +67,7 @@ def generate_ignition_db_registration_script(
         })
 
     # Generate the Python script
+    import json as json_module  # Import here to use in f-string
     script = f"""#!/usr/bin/env python3
 \"\"\"
 Ignition Gateway Database Auto-Registration Script
@@ -84,7 +85,7 @@ ADMIN_USERNAME = "{admin_username}"
 ADMIN_PASSWORD = "{admin_password}"
 
 # Database configurations
-DATABASES = {json.dumps(db_configs, indent=4)}
+DATABASES = {json_module.dumps(db_configs, indent=4)}
 
 # ANSI color codes
 GREEN = '\\033[92m'

@@ -1,0 +1,19 @@
+{
+  "instances": [
+    {
+      "app_id": "postgres",
+      "instance_name": "postgres",
+      "config": {
+        "version": "latest",
+        "port": 5432,
+        "database": "testdb",
+        "username": "testuser",
+        "password": "testpass"
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  }
+}

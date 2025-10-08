@@ -1,0 +1,10 @@
+Test: T103_grafana_prometheus
+Status: PASS
+Timestamp: 2025-10-07 22:22:35
+Duration: 61s
+Containers: 2/2
+
+Container Status:
+NAME         IMAGE                    COMMAND                  SERVICE      CREATED              STATUS              PORTS
+grafana      grafana/grafana:latest   "/run.sh"                grafana      About a minute ago   Up About a minute   0.0.0.0:3000->3000/tcp, :::3000->3000/tcp
+prometheus   prom/prometheus:latest   "/bin/prometheus --c…"   prometheus   About a minute ago   Up About a minute   0.0.0.0:9090->9090/tcp, :::9090->9090/tcp

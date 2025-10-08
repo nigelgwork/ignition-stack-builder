@@ -1,0 +1,42 @@
+{
+  "instances": [
+    {
+      "app_id": "grafana",
+      "instance_name": "grafana",
+      "config": {
+        "version": "latest",
+        "http_port": 3000,
+        "admin_username": "admin",
+        "admin_password": "admin"
+      }
+    },
+    {
+      "app_id": "prometheus",
+      "instance_name": "prometheus",
+      "config": {
+        "version": "latest",
+        "port": 9090
+      }
+    },
+    {
+      "app_id": "traefik",
+      "instance_name": "traefik",
+      "config": {
+        "version": "latest",
+        "http_port": 9080,
+        "https_port": 9443,
+        "dashboard_port": 9081
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  },
+  "integration_settings": {
+    "db_provider": {
+      "enabled": true,
+      "auto_register": true
+    }
+  }
+}

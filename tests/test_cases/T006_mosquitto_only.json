@@ -1,0 +1,17 @@
+{
+  "instances": [
+    {
+      "app_id": "mosquitto",
+      "instance_name": "mosquitto",
+      "config": {
+        "version": "latest",
+        "mqtt_port": 1883,
+        "websocket_port": 9001
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  }
+}

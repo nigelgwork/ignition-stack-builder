@@ -1,0 +1,9 @@
+Test: T006_mosquitto_only
+Status: FAIL
+Timestamp: 2025-10-07 22:00:00
+Duration: 93s
+Containers: 0/1
+
+Container Status:
+NAME        IMAGE                      COMMAND                  SERVICE     CREATED              STATUS                          PORTS
+mosquitto   eclipse-mosquitto:latest   "/docker-entrypoint.…"   mosquitto   About a minute ago   Restarting (3) 35 seconds ago   

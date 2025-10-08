@@ -1,0 +1,11 @@
+Test: T203_ignition_postgres_grafana
+Status: PASS
+Timestamp: 2025-10-07 22:31:08
+Duration: 63s
+Containers: 3/3
+
+Container Status:
+NAME       IMAGE                                 COMMAND                  SERVICE    CREATED              STATUS                        PORTS
+grafana    grafana/grafana:latest                "/run.sh"                grafana    About a minute ago   Up About a minute             0.0.0.0:3000->3000/tcp, :::3000->3000/tcp
+ignition   inductiveautomation/ignition:latest   "docker-entrypoint.sh"   ignition   About a minute ago   Up About a minute (healthy)   0.0.0.0:8043->8043/tcp, :::8043->8043/tcp, 0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
+postgres   postgres:latest                       "docker-entrypoint.s…"   postgres   About a minute ago   Up About a minute             0.0.0.0:5432->5432/tcp, :::5432->5432/tcp

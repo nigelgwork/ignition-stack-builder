@@ -1,0 +1,9 @@
+Test: T004_traefik_only
+Status: PASS
+Timestamp: 2025-10-07 22:13:25
+Duration: 60s
+Containers: 1/1
+
+Container Status:
+NAME      IMAGE            COMMAND                  SERVICE   CREATED              STATUS              PORTS
+traefik   traefik:latest   "/entrypoint.sh trae…"   traefik   About a minute ago   Up About a minute   0.0.0.0:9080->80/tcp, :::9080->80/tcp, 0.0.0.0:9443->443/tcp, :::9443->443/tcp, 0.0.0.0:9081->8080/tcp, :::9081->8080/tcp

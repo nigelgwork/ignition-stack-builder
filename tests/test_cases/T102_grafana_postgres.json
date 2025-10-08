@@ -1,0 +1,35 @@
+{
+  "instances": [
+    {
+      "app_id": "grafana",
+      "instance_name": "grafana",
+      "config": {
+        "version": "latest",
+        "http_port": 3000,
+        "admin_username": "admin",
+        "admin_password": "admin"
+      }
+    },
+    {
+      "app_id": "postgres",
+      "instance_name": "postgres",
+      "config": {
+        "version": "latest",
+        "port": 5432,
+        "database": "grafana",
+        "username": "grafana",
+        "password": "password"
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  },
+  "integration_settings": {
+    "db_provider": {
+      "enabled": true,
+      "auto_register": true
+    }
+  }
+}

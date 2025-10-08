@@ -1,0 +1,15 @@
+# Test artifacts
+temp/
+*.zip
+*.log
+
+# Test deployment directories
+test_deploy_*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Results archives (keep results/*.md)
+results/*.zip
+results/*.tar.gz

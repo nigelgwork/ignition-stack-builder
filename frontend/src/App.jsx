@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './App.css'
+import { downloadEncryptedConfig, importEncryptedConfig, validateConfigStructure } from './crypto'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -45,6 +46,13 @@ function App() {
     }
   })
   const [integrationResults, setIntegrationResults] = useState(null)
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [showLoadDialog, setShowLoadDialog] = useState(false)
+  const [savePassword, setSavePassword] = useState('')
+  const [loadPassword, setLoadPassword] = useState('')
+  const [loadFile, setLoadFile] = useState(null)
+  const [saveLoadError, setSaveLoadError] = useState('')
+  const [saveLoadSuccess, setSaveLoadSuccess] = useState('')
 
   useEffect(() => {
     // Set dark mode by default
@@ -136,7 +144,11 @@ function App() {
     }
 
     const count = (instanceCounter[app.id] || 0) + 1
-    const instanceName = `${app.id}-${count}`
+
+    // Default instance name logic:
+    // - First instance: use service type name (e.g., "keycloak", "postgres", "ignition")
+    // - Additional instances: append number (e.g., "ignition-2", "postgres-2")
+    const instanceName = count === 1 ? app.id : `${app.id}-${count}`
 
     const newInstance = {
       app_id: app.id,
@@ -213,6 +225,82 @@ function App() {
       return inst
     })
     setSelectedInstances(newInstances)
+  }
+
+  // Save configuration to encrypted file
+  const handleSaveConfig = async () => {
+    if (!savePassword || savePassword.length < 8) {
+      setSaveLoadError('Password must be at least 8 characters')
+      return
+    }
+
+    setSaveLoadError('')
+    setSaveLoadSuccess('')
+
+    try {
+      const config = {
+        instances: selectedInstances,
+        global_settings: globalSettings,
+        integration_settings: integrationSettings
+      }
+
+      const timestamp = new Date().toISOString().split('T')[0]
+      const filename = `stack-config-${timestamp}.iiotstack`
+
+      await downloadEncryptedConfig(config, savePassword, filename)
+
+      setSaveLoadSuccess(`Configuration saved to ${filename}`)
+      setTimeout(() => {
+        setShowSaveDialog(false)
+        setSavePassword('')
+        setSaveLoadSuccess('')
+      }, 2000)
+    } catch (error) {
+      setSaveLoadError(`Failed to save: ${error.message}`)
+    }
+  }
+
+  // Load configuration from encrypted file
+  const handleLoadConfig = async () => {
+    if (!loadFile) {
+      setSaveLoadError('Please select a file')
+      return
+    }
+
+    if (!loadPassword) {
+      setSaveLoadError('Please enter password')
+      return
+    }
+
+    setSaveLoadError('')
+    setSaveLoadSuccess('')
+
+    try {
+      const config = await importEncryptedConfig(loadFile, loadPassword)
+
+      // Validate structure
+      validateConfigStructure(config)
+
+      // Validate with backend
+      const response = await axios.post(`${API_URL}/validate-config`, config)
+
+      if (response.data.valid) {
+        // Apply configuration
+        setSelectedInstances(config.instances || [])
+        setGlobalSettings(config.global_settings || globalSettings)
+        setIntegrationSettings(config.integration_settings || integrationSettings)
+
+        setSaveLoadSuccess('Configuration loaded successfully!')
+        setTimeout(() => {
+          setShowLoadDialog(false)
+          setLoadPassword('')
+          setLoadFile(null)
+          setSaveLoadSuccess('')
+        }, 2000)
+      }
+    } catch (error) {
+      setSaveLoadError(`Failed to load: ${error.message}`)
+    }
   }
 
   const removeUploadedModule = (instanceId, filename) => {
@@ -334,6 +422,68 @@ function App() {
     } catch (error) {
       console.error('Error downloading stack:', error)
       alert('Error downloading stack')
+    }
+  }
+
+  const downloadLinuxInstaller = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/download/docker-installer/linux`, {
+        responseType: 'blob'
+      })
+
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'install-docker-linux.sh')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      console.error('Error downloading Linux installer:', error)
+      alert('Error downloading Linux installer')
+    }
+  }
+
+  const downloadWindowsInstaller = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/download/docker-installer/windows`, {
+        responseType: 'blob'
+      })
+
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'install-docker-windows.ps1')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      console.error('Error downloading Windows installer:', error)
+      alert('Error downloading Windows installer')
+    }
+  }
+
+  const downloadOfflineBundle = async () => {
+    try {
+      const response = await axios.post(`${API_URL}/generate-offline-bundle`, {
+        instances: selectedInstances,
+        integrations: [],
+        global_settings: globalSettings,
+        integration_settings: integrationSettings
+      }, {
+        responseType: 'blob'
+      })
+
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'iiot-stack-offline-bundle.zip')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      console.error('Error downloading offline bundle:', error)
+      alert('Error downloading offline bundle')
     }
   }
 
@@ -1561,10 +1711,136 @@ function App() {
                   onClick={downloadStack}
                   disabled={selectedInstances.length === 0}
                 >
-                  Download Stack (.zip)
+                  📦 Download Stack (.zip)
+                </button>
+                <button
+                  className="download-btn"
+                  onClick={downloadOfflineBundle}
+                  disabled={selectedInstances.length === 0}
+                  title="Download offline/airgapped bundle with image pull scripts"
+                >
+                  🔌 Offline Bundle
+                </button>
+                <button
+                  className="save-config-btn"
+                  onClick={() => setShowSaveDialog(true)}
+                  disabled={selectedInstances.length === 0}
+                  title="Save configuration as encrypted file"
+                >
+                  💾 Save Config
+                </button>
+                <button
+                  className="load-config-btn"
+                  onClick={() => setShowLoadDialog(true)}
+                  title="Load configuration from encrypted file"
+                >
+                  📂 Load Config
+                </button>
+              </div>
+
+              <div className="action-buttons" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                <h4 style={{ width: '100%', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>🐳 Docker Installers</h4>
+                <button
+                  className="utility-btn"
+                  onClick={downloadLinuxInstaller}
+                  title="Download Docker & Docker Compose installer for Linux (Ubuntu, Debian, CentOS, etc.)"
+                >
+                  🐧 Linux Installer
+                </button>
+                <button
+                  className="utility-btn"
+                  onClick={downloadWindowsInstaller}
+                  title="Download Docker Desktop installer script for Windows 10/11"
+                >
+                  🪟 Windows Installer
                 </button>
               </div>
             </div>
+
+            {/* Save Config Dialog */}
+            {showSaveDialog && (
+              <div className="modal-overlay" onClick={() => setShowSaveDialog(false)}>
+                <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                  <h2>Save Configuration</h2>
+                  <p>Your configuration will be encrypted with a password and saved as a .iiotstack file.</p>
+
+                  <div className="form-group">
+                    <label>Password (min 8 characters):</label>
+                    <input
+                      type="password"
+                      value={savePassword}
+                      onChange={(e) => setSavePassword(e.target.value)}
+                      placeholder="Enter password"
+                      minLength={8}
+                    />
+                  </div>
+
+                  {saveLoadError && <div className="error-message">{saveLoadError}</div>}
+                  {saveLoadSuccess && <div className="success-message">{saveLoadSuccess}</div>}
+
+                  <div className="modal-actions">
+                    <button onClick={handleSaveConfig} disabled={!savePassword}>
+                      Save
+                    </button>
+                    <button onClick={() => {
+                      setShowSaveDialog(false)
+                      setSavePassword('')
+                      setSaveLoadError('')
+                      setSaveLoadSuccess('')
+                    }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Load Config Dialog */}
+            {showLoadDialog && (
+              <div className="modal-overlay" onClick={() => setShowLoadDialog(false)}>
+                <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                  <h2>Load Configuration</h2>
+                  <p>Select an encrypted .iiotstack file and enter its password.</p>
+
+                  <div className="form-group">
+                    <label>Configuration File:</label>
+                    <input
+                      type="file"
+                      accept=".iiotstack"
+                      onChange={(e) => setLoadFile(e.target.files[0])}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Password:</label>
+                    <input
+                      type="password"
+                      value={loadPassword}
+                      onChange={(e) => setLoadPassword(e.target.value)}
+                      placeholder="Enter password"
+                    />
+                  </div>
+
+                  {saveLoadError && <div className="error-message">{saveLoadError}</div>}
+                  {saveLoadSuccess && <div className="success-message">{saveLoadSuccess}</div>}
+
+                  <div className="modal-actions">
+                    <button onClick={handleLoadConfig} disabled={!loadFile || !loadPassword}>
+                      Load
+                    </button>
+                    <button onClick={() => {
+                      setShowLoadDialog(false)
+                      setLoadPassword('')
+                      setLoadFile(null)
+                      setSaveLoadError('')
+                      setSaveLoadSuccess('')
+                    }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Service Overview */}
             {selectedInstances.length > 0 && (

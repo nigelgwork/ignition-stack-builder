@@ -1,0 +1,11 @@
+Test: T202_traefik_grafana_prometheus
+Status: PASS
+Timestamp: 2025-10-07 22:29:30
+Duration: 62s
+Containers: 3/3
+
+Container Status:
+NAME         IMAGE                    COMMAND                  SERVICE      CREATED              STATUS              PORTS
+grafana      grafana/grafana:latest   "/run.sh"                grafana      About a minute ago   Up About a minute   0.0.0.0:3000->3000/tcp, :::3000->3000/tcp
+prometheus   prom/prometheus:latest   "/bin/prometheus --c…"   prometheus   About a minute ago   Up About a minute   0.0.0.0:9090->9090/tcp, :::9090->9090/tcp
+traefik      traefik:latest           "/entrypoint.sh trae…"   traefik      About a minute ago   Up About a minute   0.0.0.0:9080->80/tcp, :::9080->80/tcp, 0.0.0.0:9443->443/tcp, :::9443->443/tcp, 0.0.0.0:9081->8080/tcp, :::9081->8080/tcp

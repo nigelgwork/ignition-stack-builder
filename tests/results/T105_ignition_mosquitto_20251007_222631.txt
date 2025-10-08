@@ -1,0 +1,10 @@
+Test: T105_ignition_mosquitto
+Status: PASS
+Timestamp: 2025-10-07 22:25:30
+Duration: 61s
+Containers: 2/2
+
+Container Status:
+NAME        IMAGE                                 COMMAND                  SERVICE     CREATED              STATUS                        PORTS
+ignition    inductiveautomation/ignition:latest   "docker-entrypoint.sh"   ignition    About a minute ago   Up About a minute (healthy)   0.0.0.0:8043->8043/tcp, :::8043->8043/tcp, 0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
+mosquitto   eclipse-mosquitto:latest              "/docker-entrypoint.…"   mosquitto   About a minute ago   Up About a minute             0.0.0.0:1883->1883/tcp, :::1883->1883/tcp, 0.0.0.0:9001->9001/tcp, :::9001->9001/tcp

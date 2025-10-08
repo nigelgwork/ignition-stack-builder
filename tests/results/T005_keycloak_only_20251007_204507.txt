@@ -1,0 +1,9 @@
+Test: T005_keycloak_only
+Status: PASS
+Timestamp: 2025-10-07 20:43:05
+Duration: 122s
+Containers: 1/1
+
+Container Status:
+NAME       IMAGE                              COMMAND                  SERVICE    CREATED         STATUS         PORTS
+keycloak   quay.io/keycloak/keycloak:latest   "/opt/keycloak/bin/k…"   keycloak   2 minutes ago   Up 4 seconds   8443/tcp, 9000/tcp, 0.0.0.0:8180->8080/tcp, :::8180->8080/tcp

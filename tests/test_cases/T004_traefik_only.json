@@ -1,0 +1,18 @@
+{
+  "instances": [
+    {
+      "app_id": "traefik",
+      "instance_name": "traefik",
+      "config": {
+        "version": "latest",
+        "http_port": 9080,
+        "https_port": 9443,
+        "dashboard_port": 9081
+      }
+    }
+  ],
+  "global_settings": {
+    "timezone": "UTC",
+    "restart_policy": "unless-stopped"
+  }
+}

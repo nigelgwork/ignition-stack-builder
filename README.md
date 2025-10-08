@@ -4,7 +4,7 @@
 The **Ignition Stack Builder** is a web-based tool that allows users to **design and deploy custom industrial IoT (IIoT) Docker stacks**.
 It provides a simple **web UI** where you can:
 
-- Select from a comprehensive catalog of 24+ applications (Ignition, databases, MQTT brokers, monitoring, security tools, and more).
+- Select from a comprehensive catalog of 26+ applications (Ignition, databases, MQTT brokers, monitoring, security tools, version control, and more).
 - Add **multiple instances** of certain services (e.g., Ignition gateways, databases).
 - Configure version selection, ports, credentials, and service-specific settings.
 - Set global stack settings (timezone, restart policy).
@@ -18,12 +18,14 @@ This project aims to reduce setup friction and provide **reproducible, collabora
 ## ✨ Features
 - 🔧 **Modern Dark Mode UI** – beautiful web interface with dark mode by default and light/dark toggle.
 - ➕ **Multi-instance Support** – add multiple instances of Ignition, databases, and other services.
-- 🎨 **Categorized Application Catalog** – organized by Industrial Platforms, Databases, Messaging, Monitoring, Authentication, DevOps, and more.
+- 🎨 **Categorized Application Catalog** – organized by Industrial Platforms, Databases, Messaging, Monitoring, Authentication, DevOps, Version Control, and more.
 - 🔢 **Version Selection** – choose specific container versions for each service (defaults to latest).
 - ⚙️ **Inline Configuration** – configure each instance immediately after selection with service-specific options.
 - 🌐 **Global Settings** – set timezone (defaults to Australia/Adelaide) and restart policy for the entire stack.
 - 📊 **Service Overview** – color-coded visual display of all selected services with access URLs.
 - 📦 **One-Click Download** – export complete stack as ZIP file with docker-compose.yml, .env, and README.
+- 🐳 **Docker Installers** – download ready-to-run Docker installation scripts for Linux and Windows.
+- 🔌 **Offline Bundle** – generate airgapped installation bundles with all Docker images for offline deployments.
 - 🔒 **Security Ready** – optional integration with Keycloak, Authentik, Authelia, and Vault.
 - 🌍 **Networking Ready** – Traefik reverse proxy for routing and HTTPS.  
 
@@ -67,11 +69,10 @@ The system is divided into three main components:
 ### Messaging & Brokers
 - ✅ **EMQX** – Enterprise MQTT broker with dashboard
 - ✅ **Mosquitto** – Lightweight MQTT broker
-- ✅ **RabbitMQ** – Message queue with management interface
 
 ### Automation & Workflow
 - ✅ **Node-RED** – Visual programming for IoT
-- ✅ **n8n** – Workflow automation platform
+- ✅ **n8n** – Workflow automation and integration platform
 
 ### Monitoring & Observability
 - ✅ **Prometheus** – Metrics collection and alerting
@@ -95,8 +96,13 @@ The system is divided into three main components:
 ### Remote Access
 - ✅ **Guacamole** – Clientless remote desktop gateway
 
+### Version Control
+- ✅ **GitLab** – Complete DevOps platform with Git, CI/CD, and container registry
+- ✅ **Gitea** – Lightweight self-hosted Git service
+
 ### Networking & Proxy
 - ✅ **Traefik** – Modern reverse proxy with automatic HTTPS
+- ✅ **Nginx Proxy Manager** – Easy reverse proxy management with web UI
 
 ---
 
@@ -210,19 +216,36 @@ The `.env` file contains:
 
    Access your services using the URLs listed in the generated README.md file.
 
+6. **Additional Tools Available**
+
+   **Docker Installation Scripts**
+   - Click "🐧 Linux Installer" to download a script that installs Docker and Docker Compose on Ubuntu, Debian, CentOS, RHEL, Fedora, and Arch Linux
+   - Click "🪟 Windows Installer" to download a PowerShell script that installs Docker Desktop on Windows 10/11
+   - These scripts handle all prerequisites and setup automatically
+
+   **Offline/Airgapped Deployment**
+   - Click "🔌 Offline Bundle" to generate a bundle for airgapped environments
+   - The bundle includes:
+     - All your stack configuration files
+     - Scripts to pull and save all Docker images
+     - Scripts to load images on offline systems
+     - Complete instructions for offline deployment
+   - Perfect for secure environments without internet access
+
 ## ✅ Implemented Features
 
-### Application Catalog (24+ Services)
+### Application Catalog (26+ Services)
 - ✅ **Industrial Platforms**: Ignition (with edition, JVM memory, module selection, and 3rd party module upload)
 - ✅ **Databases**: PostgreSQL, MariaDB, MSSQL, SQLite (with pgAdmin and phpMyAdmin options)
-- ✅ **Messaging**: EMQX, Mosquitto, RabbitMQ
+- ✅ **Messaging**: EMQX, Mosquitto
 - ✅ **Automation**: Node-RED, n8n
 - ✅ **Monitoring**: Prometheus, Grafana, Loki, Dozzle
 - ✅ **Authentication**: Keycloak, Authentik, Authelia
 - ✅ **DevOps**: Portainer, WhatUpDocker, MailHog
 - ✅ **Security**: HashiCorp Vault
 - ✅ **Remote Access**: Guacamole
-- ✅ **Networking**: Traefik (with automatic service routing)
+- ✅ **Version Control**: GitLab, Gitea
+- ✅ **Networking**: Traefik (with automatic service routing), Nginx Proxy Manager
 
 ### UI Features
 - ✅ Dark mode by default with light/dark toggle
@@ -246,6 +269,8 @@ The `.env` file contains:
 - ✅ Environment variable management
 - ✅ ZIP download with complete project structure
 - ✅ Generated README documentation with service URLs
+- ✅ Docker installation scripts for Linux and Windows
+- ✅ Offline/airgapped bundle generation with image pull scripts
 
 ## 🔮 Planned Features
 - 🔄 Auto-integration engine (database auto-registration, OAuth configuration)

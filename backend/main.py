@@ -22,7 +22,8 @@ from config_generator import (
     generate_traefik_static_config,
     generate_traefik_dynamic_config,
     generate_oauth_env_vars,
-    generate_email_env_vars
+    generate_email_env_vars,
+    generate_prometheus_config
 )
 from ntfy_monitor import generate_ntfy_monitor_script, generate_ntfy_readme_section
 from keycloak_generator import generate_keycloak_realm, generate_keycloak_readme_section
@@ -107,6 +108,40 @@ def read_root():
 def get_catalog():
     """Get the application catalog"""
     return load_catalog()
+
+@app.post("/validate-config")
+def validate_config(config: StackConfig):
+    """Validate and sanitize an imported stack configuration"""
+    try:
+        catalog = load_catalog()
+        catalog_dict = {app["id"]: app for app in catalog["applications"]}
+
+        # Validate all instances reference valid apps
+        for instance in config.instances:
+            if instance.app_id not in catalog_dict:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid app_id: {instance.app_id}"
+                )
+
+            app = catalog_dict[instance.app_id]
+            if not app.get("enabled", False):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"App {instance.app_id} is not enabled"
+                )
+
+        # Return validated config
+        return {
+            "valid": True,
+            "config": config.dict(),
+            "message": "Configuration is valid"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Config validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid configuration: {str(e)}")
 
 @app.get("/versions/{app_id}")
 def get_versions(app_id: str):
@@ -609,6 +644,24 @@ def generate_stack(stack_config: StackConfig):
                     env_vars.append(f"{service_name.upper().replace('-', '_')}_{key}={value}")
             env_vars.append("")
 
+        # Collect named volumes from all services
+        # Named volumes are those that don't start with ./ or / (not bind mounts)
+        named_volumes = set()
+        for service_name, service in compose["services"].items():
+            if "volumes" in service:
+                for vol in service["volumes"]:
+                    # Check if this is a named volume (not a bind mount)
+                    if ":" in vol:
+                        volume_part = vol.split(":")[0]
+                        # Named volumes don't start with ./ or /
+                        if not volume_part.startswith("./") and not volume_part.startswith("/"):
+                            named_volumes.add(volume_part)
+
+        # Add named volumes to compose structure
+        if named_volumes:
+            for vol_name in sorted(named_volumes):
+                compose["volumes"][vol_name] = None
+
         # Generate integration configuration files
         # 1. MQTT Broker Configuration
         if has_mqtt_broker:
@@ -635,6 +688,11 @@ def generate_stack(stack_config: StackConfig):
                         config_files[f"configs/{instance_name}/passwd"] = generate_mosquitto_password_file(
                             mqtt_username, mqtt_password
                         )
+
+        # Generate Prometheus config files for all Prometheus instances
+        for instance in stack_config.instances:
+            if instance.app_id == "prometheus":
+                config_files[f"configs/{instance.instance_name}/prometheus.yml"] = generate_prometheus_config()
 
         # 2. Grafana Datasource Provisioning
         if "visualization" in integration_results.get("integrations", {}):
@@ -699,6 +757,29 @@ def generate_stack(stack_config: StackConfig):
    **Note:** For Ignition stacks, use `start.sh`/`start.bat` instead of `docker-compose up -d` directly.
    This ensures data volumes are properly initialized on first startup."""
 
+        # Generate list of required directories for config files (bind mounts only)
+        # Named volumes are automatically managed by Docker, no directory creation needed
+        required_dirs = set()
+        for instance in stack_config.instances:
+            app = catalog_dict.get(instance.app_id)
+            if app and "volumes" in app["default_config"]:
+                for vol in app["default_config"]["volumes"]:
+                    if ":" in vol and vol.startswith("./"):
+                        # Extract local path from volume mapping (e.g., "./configs/traefik/traefik.yml:/etc/traefik/traefik.yml")
+                        local_path = vol.split(":")[0]
+                        # Replace {instance_name} placeholder
+                        local_path = local_path.replace("{instance_name}", instance.instance_name)
+
+                        # Only add parent directory of config files, not data directories
+                        # For config files, we need to ensure the parent directory exists
+                        if "/" in local_path:
+                            parent_dir = "/".join(local_path.split("/")[:-1])
+                            if parent_dir:  # Ensure it's not empty
+                                required_dirs.add(parent_dir)
+
+        # Generate directory creation commands
+        dir_creation_cmds = "\n   ".join([f"mkdir -p {d}" for d in sorted(required_dirs)]) if required_dirs else "   # No directories required - using Docker named volumes"
+
         readme_content = f"""# IIoT Stack - Generated Configuration
 
 ## Global Settings
@@ -714,7 +795,7 @@ def generate_stack(stack_config: StackConfig):
 2. Customize any settings as needed
 3. Create required directories:
    ```bash
-   mkdir -p configs
+   {dir_creation_cmds}
    ```
 {startup_instructions}
 
@@ -928,7 +1009,10 @@ def download_stack(stack_config: StackConfig):
 
             # Add generated config files from integrations
             for file_path, content in generated.get("config_files", {}).items():
-                zip_file.writestr(file_path, content)
+                # Create ZipInfo with proper permissions (0o644 = rw-r--r--)
+                info = zipfile.ZipInfo(file_path)
+                info.external_attr = 0o644 << 16  # Set file permissions
+                zip_file.writestr(info, content)
 
             # Create directory structure placeholders
             zip_file.writestr("configs/.gitkeep", "")
@@ -1000,6 +1084,10 @@ def download_stack(stack_config: StackConfig):
             has_postgres = any(inst.app_id == "postgres" for inst in stack_config.instances)
 
             if has_ignition:
+                # Load catalog for volume path extraction
+                catalog = load_catalog()
+                catalog_dict_download = {app["id"]: app for app in catalog["applications"]}
+
                 ignition_instances = [inst for inst in stack_config.instances if inst.app_id == "ignition"]
 
                 # Get Ignition and PostgreSQL configs for database auto-configuration
@@ -1020,48 +1108,54 @@ set -e
 echo "🚀 Ignition Stack Initialization Script"
 echo "========================================"
 
-# Check if this is first run by looking for existing data directories
-FIRST_RUN=false
+# Create required directories for config files (if any)
+# Note: Data directories are managed as Docker named volumes
+echo ""
+echo "📁 Creating config directories..."
 """
+                # Add directory creation only for config file bind mounts (not data directories)
+                config_dirs = set()
+                for instance in stack_config.instances:
+                    app = catalog_dict_download.get(instance.app_id)
+                    if app and "volumes" in app["default_config"]:
+                        for vol in app["default_config"]["volumes"]:
+                            if ":" in vol and vol.startswith("./"):
+                                local_path = vol.split(":")[0]
+                                local_path = local_path.replace("{instance_name}", instance.instance_name)
+                                # Only add parent directory of config files
+                                if "/" in local_path:
+                                    parent_dir = "/".join(local_path.split("/")[:-1])
+                                    if parent_dir:
+                                        config_dirs.add(parent_dir)
 
-                # Add checks for each Ignition instance
-                for inst in ignition_instances:
-                    service_name = inst.instance_name
-                    init_script += f"""
-if [ ! -d "./configs/{service_name}/data" ] || [ -z "$(ls -A ./configs/{service_name}/data 2>/dev/null)" ]; then
-    echo "📋 First run detected for {service_name} - will initialize volumes"
-    FIRST_RUN=true
-fi
+                if config_dirs:
+                    for config_dir in sorted(config_dirs):
+                        init_script += f"""mkdir -p {config_dir}
 """
-
-                init_script += """
-if [ "$FIRST_RUN" = true ]; then
-    echo ""
-    echo "🔧 PHASE 1: Initial startup without volumes"
-    echo "============================================"
-
-    # Create a temporary docker-compose without Ignition volumes
-    cp docker-compose.yml docker-compose.yml.backup
-
-    # Remove volume mounts from Ignition services
-"""
-
-                for inst in ignition_instances:
-                    service_name = inst.instance_name
-                    init_script += f"""    sed -i.tmp '/{service_name}/,/^  [a-z]/ {{ /volumes:/,/^    [^ ]/d; }}' docker-compose.yml
+                else:
+                    init_script += """# No config directories required
 """
 
                 init_script += """
-    echo "Starting services without Ignition data volumes..."
+echo "✅ Config directories ready"
+
+# With named volumes, Ignition can start normally without two-phase initialization
+# Docker manages the named volumes automatically
+echo ""
+echo "🚀 Starting all services..."
+echo "============================"
+"""
+
+                init_script += """
     docker-compose up -d
 
     echo ""
-    echo "⏳ Waiting for Ignition to initialize (this may take 60-90 seconds)..."
-    sleep 30
+    echo "⏳ Waiting for services to start..."
+    sleep 10
 
-    # Wait for Ignition to be healthy
+    # Wait for Ignition to be healthy (if present)
     WAIT_TIME=0
-    MAX_WAIT=120
+    MAX_WAIT=90
 
     while [ $WAIT_TIME -lt $MAX_WAIT ]; do
 """
@@ -1082,21 +1176,8 @@ if [ "$FIRST_RUN" = true ]; then
     done
 
     if [ $WAIT_TIME -ge $MAX_WAIT ]; then
-        echo "⚠️  Warning: Ignition did not become healthy in time, but continuing..."
+        echo "⚠️  Warning: Service health check timed out, but services are running"
     fi
-
-    echo ""
-    echo "🔧 PHASE 2: Enabling persistent volumes"
-    echo "========================================"
-
-    echo "Copying initialized data from containers to volumes..."
-"""
-
-                # Add docker cp commands for each Ignition instance
-                for inst in ignition_instances:
-                    service_name = inst.instance_name
-                    init_script += f"""    mkdir -p "./configs/{service_name}/data"
-    docker cp {service_name}:/usr/local/bin/ignition/data/. ./configs/{service_name}/data/ 2>/dev/null || echo "   Note: Data directory may already be populated"
 """
 
                 # If PostgreSQL is present, create connection instructions
@@ -1107,10 +1188,11 @@ if [ "$FIRST_RUN" = true ]; then
                     db_host = postgres_config.instance_name
                     db_port = postgres_config.config.get("port", 5432)
 
-                    # Create a database connection instructions file
+                    # Create config directory for Ignition
                     init_script += f"""
-    # Create PostgreSQL connection instructions
-    cat > "./configs/{ignition_config.instance_name}/postgres_connection_info.txt" <<'DBINFO'
+# Create PostgreSQL connection instructions
+mkdir -p "./configs/{ignition_config.instance_name}"
+cat > "./configs/{ignition_config.instance_name}/postgres_connection_info.txt" <<'DBINFO'
 PostgreSQL Database Connection Information
 ==========================================
 
@@ -1138,40 +1220,16 @@ Database Credentials:
 - Username: {db_user}
 - Password: {db_pass}
 DBINFO
-    echo "   📄 PostgreSQL connection info saved to configs/{ignition_config.instance_name}/postgres_connection_info.txt"
-"""
-
-                for inst in ignition_instances:
-                    service_name = inst.instance_name
-                    init_script += f"""
-    # Fix permissions (Ignition runs as user 999:999 inside container)
-    sudo chown -R 999:999 "./configs/{service_name}/data" 2>/dev/null || chmod -R 777 "./configs/{service_name}/data"
-    echo "   ✅ Data copied for {service_name}"
+echo "   📄 PostgreSQL connection info saved to configs/{ignition_config.instance_name}/postgres_connection_info.txt"
 """
 
                 init_script += """
-    echo "Stopping services..."
-    docker-compose down
 
-    # Restore original docker-compose with volumes
-    mv docker-compose.yml.backup docker-compose.yml
-    rm -f docker-compose.yml.tmp
-
-    echo "Restarting with persistent volumes enabled..."
-    docker-compose up -d
-
-    echo ""
-    echo "✅ Volume initialization complete!"
-    echo ""
-    echo "📊 Waiting for services to be ready..."
-    sleep 15
-
-else
-    echo ""
-    echo "✅ Data volumes already initialized - starting normally"
-    echo ""
-    docker-compose up -d
-fi
+echo ""
+echo "✅ Services started successfully!"
+echo ""
+echo "📊 Waiting for services to be fully ready..."
+sleep 10
 
 echo ""
 echo "🎉 Stack is ready!"
@@ -1335,6 +1393,293 @@ pause
         )
 
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/download/docker-installer/linux")
+def download_linux_installer():
+    """Download Linux Docker installation script"""
+    try:
+        script_path = "/scripts/install-docker-linux.sh"
+        with open(script_path, "r") as f:
+            script_content = f.read()
+
+        return StreamingResponse(
+            io.BytesIO(script_content.encode('utf-8')),
+            media_type="text/x-shellscript",
+            headers={"Content-Disposition": "attachment; filename=install-docker-linux.sh"}
+        )
+    except Exception as e:
+        logger.error(f"Error downloading Linux installer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/download/docker-installer/windows")
+def download_windows_installer():
+    """Download Windows Docker installation script"""
+    try:
+        script_path = "/scripts/install-docker-windows.ps1"
+        with open(script_path, "r") as f:
+            script_content = f.read()
+
+        return StreamingResponse(
+            io.BytesIO(script_content.encode('utf-8')),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": "attachment; filename=install-docker-windows.ps1"}
+        )
+    except Exception as e:
+        logger.error(f"Error downloading Windows installer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-offline-bundle")
+def generate_offline_bundle(stack_config: StackConfig):
+    """Generate offline bundle with all Docker images and configurations"""
+    try:
+        # Generate the stack first
+        generated = generate_stack(stack_config)
+
+        # Create a shell script to pull and save all Docker images
+        catalog = load_catalog()
+        catalog_dict = {app["id"]: app for app in catalog["applications"]}
+
+        images_to_pull = []
+        for instance in stack_config.instances:
+            app = catalog_dict.get(instance.app_id)
+            if not app or not app.get("enabled", False):
+                continue
+
+            version = instance.config.get("version", app.get("default_version", "latest"))
+            image = f"{app['image']}:{version}"
+            images_to_pull.append(image)
+
+        # Generate pull and save script
+        pull_script = """#!/bin/bash
+# Offline Bundle Image Pull and Save Script
+# This script pulls all required Docker images and saves them to a tar file
+# for offline/airgapped installation
+
+set -e
+
+echo "🚀 Offline Bundle Generator"
+echo "============================"
+echo ""
+echo "This script will:"
+echo "  1. Pull all required Docker images"
+echo "  2. Save images to docker-images.tar"
+echo "  3. Create a complete offline bundle"
+echo ""
+
+# Colors
+GREEN='\\033[0;32m'
+YELLOW='\\033[1;33m'
+NC='\\033[0m' # No Color
+
+"""
+
+        for image in images_to_pull:
+            pull_script += f"""echo -e "${{GREEN}}[INFO]${{NC}} Pulling {image}..."
+docker pull {image}
+
+"""
+
+        pull_script += f"""
+echo ""
+echo -e "${{GREEN}}[INFO]${{NC}} Saving all images to docker-images.tar..."
+docker save -o docker-images.tar {' '.join(images_to_pull)}
+
+echo ""
+echo -e "${{GREEN}}[INFO]${{NC}} Compressing images..."
+gzip docker-images.tar
+
+echo ""
+echo "✅ Offline bundle created successfully!"
+echo ""
+echo "📦 Bundle contents:"
+echo "   - docker-images.tar.gz (all Docker images)"
+echo "   - docker-compose.yml"
+echo "   - .env"
+echo "   - All configuration files"
+echo ""
+echo "📋 To use on offline system:"
+echo "   1. Transfer all files to the offline system"
+echo "   2. Load images: gunzip -c docker-images.tar.gz | docker load"
+echo "   3. Run: docker-compose up -d"
+echo ""
+"""
+
+        # Create load script for offline system
+        load_script = """#!/bin/bash
+# Offline Bundle Load Script
+# Run this on the airgapped/offline system to load Docker images
+
+set -e
+
+echo "🚀 Loading Docker images from offline bundle..."
+echo "==============================================="
+echo ""
+
+if [ ! -f "docker-images.tar.gz" ]; then
+    echo "ERROR: docker-images.tar.gz not found!"
+    echo "Please ensure the offline bundle files are in the current directory."
+    exit 1
+fi
+
+echo "Decompressing and loading images..."
+gunzip -c docker-images.tar.gz | docker load
+
+echo ""
+echo "✅ All images loaded successfully!"
+echo ""
+echo "Next steps:"
+echo "  1. Review docker-compose.yml and .env files"
+echo "  2. Create required directories (see README.md)"
+echo "  3. Run: docker-compose up -d"
+echo ""
+"""
+
+        # Create README for offline bundle
+        offline_readme = """# Offline/Airgapped Installation Bundle
+
+This bundle contains everything needed to run your IIoT stack in an offline/airgapped environment.
+
+## Bundle Contents
+
+- `docker-images.tar.gz` - All required Docker images
+- `docker-compose.yml` - Docker Compose configuration
+- `.env` - Environment variables
+- `configs/` - Configuration files for services
+- `load-images.sh` - Script to load images on offline system
+- `README.md` - This file
+
+## Prerequisites (on offline system)
+
+- Docker installed and running
+- Docker Compose installed
+- Sufficient disk space for images (check file size)
+
+## Installation Steps
+
+### 1. Transfer Bundle
+
+Transfer all files from this bundle to your offline system using:
+- USB drive
+- Network transfer (if temporarily connected)
+- Any secure file transfer method
+
+### 2. Load Docker Images
+
+On the offline system, run:
+
+```bash
+chmod +x load-images.sh
+./load-images.sh
+```
+
+Or manually:
+
+```bash
+gunzip -c docker-images.tar.gz | docker load
+```
+
+### 3. Start the Stack
+
+Follow the same instructions as in the main README.md:
+
+```bash
+# Create required directories
+mkdir -p configs scripts
+
+# Start services
+docker-compose up -d
+```
+
+## Verification
+
+Check that all images are loaded:
+
+```bash
+docker images
+```
+
+Check that all services are running:
+
+```bash
+docker-compose ps
+```
+
+## Troubleshooting
+
+### Images not loading
+- Ensure docker-images.tar.gz is not corrupted
+- Check available disk space
+- Verify Docker daemon is running
+
+### Services failing to start
+- Check logs: `docker-compose logs -f`
+- Verify all config files are present
+- Ensure ports are not in use
+
+## Support
+
+For issues and documentation, see the main README.md file.
+
+---
+
+Generated by Ignition Stack Builder - Offline Bundle
+"""
+
+        # Create ZIP file with offline bundle
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Add all generated files
+            zip_file.writestr("docker-compose.yml", generated["docker_compose"])
+            zip_file.writestr(".env", generated["env"])
+            zip_file.writestr("README.md", generated["readme"])
+            zip_file.writestr("OFFLINE-README.md", offline_readme)
+            zip_file.writestr("pull-images.sh", pull_script)
+            zip_file.writestr("load-images.sh", load_script)
+
+            # Add config files
+            for file_path, content in generated.get("config_files", {}).items():
+                info = zipfile.ZipInfo(file_path)
+                info.external_attr = 0o644 << 16
+                zip_file.writestr(info, content)
+
+            # Add instructions file
+            instructions = """OFFLINE BUNDLE CREATION INSTRUCTIONS
+=====================================
+
+Step 1: On a system WITH internet access:
+-----------------------------------------
+1. Extract this bundle
+2. Run: chmod +x pull-images.sh
+3. Run: ./pull-images.sh
+   This will download all Docker images and create docker-images.tar.gz
+
+Step 2: Transfer to offline system:
+-----------------------------------
+1. Copy ALL files including docker-images.tar.gz to offline system
+2. Use USB drive, secure network transfer, or approved method
+
+Step 3: On the OFFLINE system:
+------------------------------
+1. Run: chmod +x load-images.sh
+2. Run: ./load-images.sh
+3. Follow README.md to start the stack
+
+The docker-images.tar.gz file will be large (several GB).
+Ensure you have sufficient space and transfer capacity.
+"""
+            zip_file.writestr("INSTRUCTIONS.txt", instructions)
+
+        zip_buffer.seek(0)
+
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={"Content-Disposition": "attachment; filename=iiot-stack-offline-bundle.zip"}
+        )
+
+    except Exception as e:
+        logger.error(f"Error generating offline bundle: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

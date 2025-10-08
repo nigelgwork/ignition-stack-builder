@@ -1,0 +1,10 @@
+Test: T102_grafana_postgres
+Status: PASS
+Timestamp: 2025-10-07 22:19:46
+Duration: 62s
+Containers: 2/2
+
+Container Status:
+NAME       IMAGE                    COMMAND                  SERVICE    CREATED              STATUS              PORTS
+grafana    grafana/grafana:latest   "/run.sh"                grafana    About a minute ago   Up About a minute   0.0.0.0:3000->3000/tcp, :::3000->3000/tcp
+postgres   postgres:latest          "docker-entrypoint.s…"   postgres   About a minute ago   Up About a minute   0.0.0.0:5432->5432/tcp, :::5432->5432/tcp

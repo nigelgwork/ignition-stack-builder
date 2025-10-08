@@ -1,0 +1,10 @@
+Test: T201_keycloak_grafana
+Status: PASS
+Timestamp: 2025-10-07 22:28:12
+Duration: 61s
+Containers: 2/2
+
+Container Status:
+NAME       IMAGE                              COMMAND                  SERVICE    CREATED              STATUS              PORTS
+grafana    grafana/grafana:latest             "/run.sh"                grafana    About a minute ago   Up About a minute   0.0.0.0:3000->3000/tcp, :::3000->3000/tcp
+keycloak   quay.io/keycloak/keycloak:latest   "/opt/keycloak/bin/k…"   keycloak   About a minute ago   Up 11 seconds       8443/tcp, 9000/tcp, 0.0.0.0:8180->8080/tcp, :::8180->8080/tcp

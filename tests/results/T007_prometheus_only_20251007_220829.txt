@@ -1,0 +1,9 @@
+Test: T007_prometheus_only
+Status: FAIL
+Timestamp: 2025-10-07 22:07:26
+Duration: 63s
+Containers: 0/1
+
+Container Status:
+NAME         IMAGE                    COMMAND                  SERVICE      CREATED              STATUS                         PORTS
+prometheus   prom/prometheus:latest   "/bin/prometheus --c…"   prometheus   About a minute ago   Restarting (2) 5 seconds ago   
