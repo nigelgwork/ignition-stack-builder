@@ -46,7 +46,8 @@
       "Read(///**)",
       "Bash(exec bash)",
       "Bash(/bin/bash -c \"cd /git/ignition-stack-builder && ls\")",
-      "Read(//git/**)"
+      "Read(//git/**)",
+      "Bash(./cleanup_for_github.sh:*)"
     ],
     "deny": [],
     "ask": []
