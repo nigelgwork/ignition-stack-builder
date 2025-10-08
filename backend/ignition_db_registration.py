@@ -389,8 +389,8 @@ python3 scripts/register_databases.py
 ### Troubleshooting
 
 **Connection Not Appearing:**
-- Check that database containers are running: `docker-compose ps`
-- Ensure database is ready: `docker-compose logs <db-service>`
+- Check that database containers are running: `docker compose ps`
+- Ensure database is ready: `docker compose logs <db-service>`
 - Re-run registration script: `python3 scripts/register_databases.py`
 
 **Connection Test Fails:**

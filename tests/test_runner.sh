@@ -45,7 +45,7 @@ echo ""
 # Clean previous deployment
 if [ -d "$TEST_DIR" ]; then
     echo -e "${YELLOW}🧹 Cleaning previous deployment...${NC}"
-    cd "$TEST_DIR" 2>/dev/null && docker-compose down -v 2>/dev/null || true
+    cd "$TEST_DIR" 2>/dev/null && docker compose down -v 2>/dev/null || true
     cd - >/dev/null
     rm -rf "$TEST_DIR"
 fi
@@ -86,8 +86,8 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 
 unzip -q "${TEST_DIR}/stack.zip" -d "$TEST_DIR"
 
-if [ ! -f "${TEST_DIR}/docker-compose.yml" ]; then
-    echo -e "${RED}❌ FAIL: docker-compose.yml not found in extracted files${NC}"
+if [ ! -f "${TEST_DIR}/docker compose.yml" ]; then
+    echo -e "${RED}❌ FAIL: docker compose.yml not found in extracted files${NC}"
     exit 1
 fi
 
@@ -103,7 +103,7 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 
 cd "$TEST_DIR"
 
-# Use start.sh if it exists (for Ignition stacks), otherwise docker-compose
+# Use start.sh if it exists (for Ignition stacks), otherwise docker compose
 if [ -f "start.sh" ]; then
     echo "Using start.sh for deployment..."
     chmod +x start.sh
@@ -111,8 +111,8 @@ if [ -f "start.sh" ]; then
     DEPLOY_PID=$!
     echo "Deployment started (PID: $DEPLOY_PID)"
 else
-    echo "Using docker-compose for deployment..."
-    docker-compose up -d > deploy.log 2>&1
+    echo "Using docker compose for deployment..."
+    docker compose up -d > deploy.log 2>&1
 fi
 
 cd - >/dev/null
@@ -134,16 +134,16 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 cd "$TEST_DIR"
 
 # Get expected services
-EXPECTED_SERVICES=$(docker-compose config --services | wc -l)
+EXPECTED_SERVICES=$(docker compose config --services | wc -l)
 echo "Expected services: $EXPECTED_SERVICES"
 
 # Get running containers
-RUNNING_CONTAINERS=$(docker-compose ps | grep "Up" | wc -l)
+RUNNING_CONTAINERS=$(docker compose ps | grep "Up" | wc -l)
 echo "Running containers: $RUNNING_CONTAINERS"
 
 # Show container status
 echo ""
-docker-compose ps
+docker compose ps
 
 cd - >/dev/null
 
@@ -198,7 +198,7 @@ RESULT_FILE="results/${TEST_ID}_$(date +%Y%m%d_%H%M%S).txt"
     echo "Containers: $RUNNING_CONTAINERS/$EXPECTED_SERVICES"
     echo ""
     echo "Container Status:"
-    cd "$TEST_DIR" && docker-compose ps && cd - >/dev/null
+    cd "$TEST_DIR" && docker compose ps && cd - >/dev/null
 } > "$RESULT_FILE"
 
 echo -e "${BLUE}📝 Results saved to: $RESULT_FILE${NC}"
@@ -207,7 +207,7 @@ echo ""
 # Cleanup prompt
 echo -e "${YELLOW}🧹 Cleanup:${NC}"
 echo "  Keep running: Containers remain active for inspection"
-echo "  Stop now:     cd $TEST_DIR && docker-compose down -v"
+echo "  Stop now:     cd $TEST_DIR && docker compose down -v"
 echo ""
 
 # Return exit code based on success

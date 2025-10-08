@@ -106,8 +106,18 @@ install_docker_arch() {
     # Update package database
     pacman -Syu --noconfirm
 
-    # Install Docker
-    pacman -S --noconfirm docker docker-compose
+    # Install Docker with Compose v2 plugin
+    # The 'docker' package in Arch includes docker-compose v2 as a plugin
+    pacman -S --noconfirm docker docker-buildx
+
+    # Verify docker compose v2 is available
+    if docker compose version &>/dev/null; then
+        print_info "Docker Compose v2 verified"
+    else
+        print_warning "Docker Compose v2 not found, installing docker-compose plugin"
+        # Fallback: try to install compose plugin separately if needed
+        pacman -S --noconfirm docker-compose &>/dev/null || true
+    fi
 
     print_info "Docker installed successfully on Arch Linux"
 }
@@ -200,6 +210,10 @@ print_info ""
 print_info "Next steps:"
 print_info "  1. Log out and log back in (or run 'newgrp docker') to use Docker without sudo"
 print_info "  2. Run 'docker --version' to verify the installation"
-print_info "  3. Run 'docker compose version' to verify Docker Compose"
+print_info "  3. Run 'docker compose version' to verify Docker Compose v2"
+print_info ""
+print_info "Important: Docker Compose v2 uses 'docker compose' (with a space)"
+print_info "  ✓ Correct:   docker compose up -d"
+print_info "  ✗ Old v1:    docker-compose up -d"
 print_info ""
 print_info "You can now use the Ignition Stack Builder to create and manage your containers!"

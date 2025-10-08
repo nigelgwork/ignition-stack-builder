@@ -24,7 +24,7 @@ if [ "$BACKEND_STATUS" = "running" ] && [ "$FRONTEND_STATUS" = "running" ]; then
 fi
 
 echo "🚀 Starting stack builder containers..."
-docker-compose up -d
+docker compose up -d
 
 echo "⏳ Waiting for services to be ready..."
 sleep 5
@@ -43,5 +43,5 @@ while [ $WAITED -lt $MAX_WAIT ]; do
 done
 
 echo "❌ Backend failed to become ready in time"
-echo "Check logs with: docker-compose logs backend"
+echo "Check logs with: docker compose logs backend"
 exit 1

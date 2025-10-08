@@ -1144,53 +1144,6 @@
       "planned": true
     },
     {
-      "id": "loki",
-      "name": "Loki",
-      "category": "Monitoring & Observability",
-      "description": "Log aggregation system",
-      "image": "grafana/loki",
-      "default_version": "latest",
-      "available_versions": [
-        "latest",
-        "3.3.0",
-        "3.2.0",
-        "3.1.0"
-      ],
-      "supports_multiple": false,
-      "default_config": {
-        "ports": [
-          "3100:3100"
-        ],
-        "environment": {},
-        "volumes": [
-          "{instance_name}-data:/loki"
-        ]
-      },
-      "configurable_options": {
-        "name": {
-          "type": "text",
-          "default": "loki",
-          "label": "Instance Name",
-          "description": "Custom name for this Loki instance"
-        },
-        "version": {
-          "type": "select",
-          "default": "latest",
-          "label": "Version"
-        },
-        "port": {
-          "type": "number",
-          "default": 3100,
-          "label": "HTTP Port"
-        }
-      },
-      "integrations": [
-        "log_aggregation"
-      ],
-      "enabled": false,
-      "planned": true
-    },
-    {
       "id": "dozzle",
       "name": "Dozzle",
       "category": "Monitoring & Observability",

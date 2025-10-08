@@ -161,15 +161,6 @@ def generate_grafana_datasources(datasources: List[Dict[str, Any]]) -> str:
                 "editable": True
             })
 
-        elif ds_type == "loki":
-            provisioning["datasources"].append({
-                "name": "Loki",
-                "type": "loki",
-                "access": "proxy",
-                "url": f"http://{instance_name}:3100",
-                "editable": True
-            })
-
     return yaml.dump(provisioning, default_flow_style=False, sort_keys=False)
 
 

@@ -40,18 +40,11 @@
       "mutually_exclusive": false,
       "targets": ["ignition", "traefik", "postgres", "mariadb", "emqx", "vault"]
     },
-    "log_aggregation": {
-      "name": "Log Aggregation",
-      "description": "Collects and aggregates logs from containers",
-      "providers": ["loki"],
-      "mutually_exclusive": false,
-      "requires_sidecar": "promtail"
-    },
     "visualization": {
       "name": "Visualization Platform",
       "description": "Provides dashboards and data visualization",
       "providers": ["grafana"],
-      "data_sources": ["prometheus", "loki", "postgres", "mariadb", "mssql"]
+      "data_sources": ["prometheus", "postgres", "mariadb", "mssql"]
     },
     "secrets_management": {
       "name": "Secrets Management",
@@ -206,7 +199,6 @@
           "provisioning_path": "/etc/grafana/provisioning/datasources",
           "datasource_types": {
             "prometheus": "prometheus",
-            "loki": "loki",
             "postgres": "postgres",
             "mariadb": "mysql",
             "mssql": "mssql"
@@ -279,18 +271,6 @@
             "traefik": {"port": 8080, "path": "/metrics"},
             "vault": {"port": 8200, "path": "/v1/sys/metrics"}
           }
-        }
-      }
-    },
-
-    "loki": {
-      "provides": ["log_aggregation"],
-      "consumes": ["reverse_proxy"],
-      "integrations": {
-        "log_aggregation": {
-          "type": "provider",
-          "requires_promtail": true,
-          "promtail_config_template": "promtail-config.yml"
         }
       }
     },
@@ -550,15 +530,6 @@
           "level": "warning",
           "message": "Keycloak works best with PostgreSQL. Consider adding it for production use."
         }
-      },
-      {
-        "service": "loki",
-        "requires": {
-          "type": "sidecar",
-          "service": "promtail",
-          "auto_add": true,
-          "message": "Loki requires Promtail for log collection. It will be automatically added."
-        }
       }
     ],
     "recommendations": [
@@ -569,8 +540,8 @@
       },
       {
         "if_selected": ["grafana"],
-        "if_not_selected": ["prometheus", "loki", "postgres", "mariadb"],
-        "message": "Grafana needs data sources. Consider adding Prometheus, Loki, or a database.",
+        "if_not_selected": ["prometheus", "postgres", "mariadb"],
+        "message": "Grafana needs data sources. Consider adding Prometheus or a database.",
         "level": "warning"
       },
       {

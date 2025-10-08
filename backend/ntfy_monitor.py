@@ -51,9 +51,9 @@ send_notification() {{
 # Function to get stack status
 get_stack_status() {{
     local status_msg=""
-    local container_count=$(docker-compose ps -q 2>/dev/null | wc -l)
-    local running_count=$(docker-compose ps -q 2>/dev/null | xargs docker inspect -f '{{{{.State.Running}}}}' 2>/dev/null | grep -c true || echo 0)
-    local healthy_count=$(docker-compose ps -q 2>/dev/null | xargs docker inspect -f '{{{{.State.Health.Status}}}}' 2>/dev/null | grep -c healthy || echo 0)
+    local container_count=$(docker compose ps -q 2>/dev/null | wc -l)
+    local running_count=$(docker compose ps -q 2>/dev/null | xargs docker inspect -f '{{{{.State.Running}}}}' 2>/dev/null | grep -c true || echo 0)
+    local healthy_count=$(docker compose ps -q 2>/dev/null | xargs docker inspect -f '{{{{.State.Health.Status}}}}' 2>/dev/null | grep -c healthy || echo 0)
 
     # Get container details
     local container_details=""
@@ -73,7 +73,7 @@ get_stack_status() {{
                 container_details+="❌ $name: $state\\n"
             fi
         fi
-    done < <(docker-compose ps -q 2>/dev/null)
+    done < <(docker compose ps -q 2>/dev/null)
 
     # Build status message
     status_msg="Stack: $STACK_NAME\\n"
@@ -106,7 +106,7 @@ get_detailed_status() {{
             details+="    Status: $state\\n"
             details+="    CPU: $cpu | Mem: $mem\\n"
         fi
-    done < <(docker-compose ps -q 2>/dev/null)
+    done < <(docker compose ps -q 2>/dev/null)
 
     echo -e "$details"
 }}
@@ -150,8 +150,8 @@ while true; do
         status=$(get_stack_status)
 
         # Check if all containers are running
-        container_count=$(docker-compose ps -q 2>/dev/null | wc -l)
-        running_count=$(docker-compose ps -q 2>/dev/null | xargs docker inspect -f '{{{{.State.Running}}}}' 2>/dev/null | grep -c true || echo 0)
+        container_count=$(docker compose ps -q 2>/dev/null | wc -l)
+        running_count=$(docker compose ps -q 2>/dev/null | xargs docker inspect -f '{{{{.State.Running}}}}' 2>/dev/null | grep -c true || echo 0)
 
         if [ $container_count -eq $running_count ] && [ $container_count -gt 0 ]; then
             # All running - send normal update

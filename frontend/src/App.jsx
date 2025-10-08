@@ -13,6 +13,7 @@ function App() {
   const [generatedConfig, setGeneratedConfig] = useState(null)
   const [loading, setLoading] = useState(true)
   const [globalSettings, setGlobalSettings] = useState({
+    stack_name: 'iiot-stack',
     timezone: 'Australia/Adelaide',
     restart_policy: 'unless-stopped',
     ntfy_enabled: false,
@@ -114,7 +115,16 @@ function App() {
   const isServiceDisabled = (appId) => {
     // Define mutual exclusivity groups
     const mutualExclusivityGroups = {
-      reverse_proxy: ['traefik', 'nginx-proxy-manager']
+      reverse_proxy: ['traefik', 'nginx-proxy-manager'],
+      mqtt_broker: ['mosquitto', 'emqx'],
+      version_control: ['gitlab', 'gitea']
+    }
+
+    // Define custom messages for each group
+    const groupMessages = {
+      reverse_proxy: 'Only one reverse proxy allowed',
+      mqtt_broker: 'Only one MQTT broker allowed',
+      version_control: 'Only one version control system allowed'
     }
 
     for (const [groupName, services] of Object.entries(mutualExclusivityGroups)) {
@@ -125,9 +135,10 @@ function App() {
         )
 
         if (conflictingService) {
+          const message = groupMessages[groupName] || 'Only one service from this group allowed'
           return {
             disabled: true,
-            reason: `Only one reverse proxy allowed. Remove ${conflictingService.app_id} first.`
+            reason: `${message}. Remove ${conflictingService.app_id} first.`
           }
         }
       }
@@ -160,7 +171,12 @@ function App() {
     // Set default config values
     if (app.configurable_options) {
       Object.entries(app.configurable_options).forEach(([key, option]) => {
-        newInstance.config[key] = option.default
+        // For 'name' field, use the calculated instance name instead of catalog default
+        if (key === 'name') {
+          newInstance.config[key] = instanceName
+        } else {
+          newInstance.config[key] = option.default
+        }
       })
     }
 
@@ -412,10 +428,20 @@ function App() {
         responseType: 'blob'
       })
 
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers['content-disposition']
+      let filename = 'iiot-stack.zip' // fallback
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '')
+        }
+      }
+
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', 'iiot-stack.zip')
+      link.setAttribute('download', filename)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -474,10 +500,20 @@ function App() {
         responseType: 'blob'
       })
 
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers['content-disposition']
+      let filename = 'iiot-stack-offline-bundle.zip' // fallback
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '')
+        }
+      }
+
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', 'iiot-stack-offline-bundle.zip')
+      link.setAttribute('download', filename)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -647,16 +683,7 @@ function App() {
                 ...prev,
                 [passwordFieldKey]: !prev[passwordFieldKey]
               }))}
-              style={{
-                position: 'absolute',
-                right: '8px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '18px',
-                padding: '4px',
-                opacity: 0.6
-              }}
+              className="password-toggle-btn"
               title={isPasswordVisible ? "Hide password" : "Show password"}
             >
               {isPasswordVisible ? '👁️' : '👁️‍🗨️'}
@@ -846,7 +873,7 @@ function App() {
     if (appId === 'keycloak' || appId === 'authentik' || appId === 'authelia') return 'auth'
     if (appId === 'nodered' || appId === 'n8n') return 'app'
     if (appId === 'emqx' || appId === 'mosquitto' || appId === 'rabbitmq') return 'app'
-    if (appId === 'prometheus' || appId === 'grafana' || appId === 'loki' || appId === 'dozzle') return 'app'
+    if (appId === 'prometheus' || appId === 'grafana' || appId === 'dozzle') return 'app'
     if (appId === 'portainer' || appId === 'whatupdocker') return 'app'
     if (appId === 'vault') return 'app'
     if (appId === 'guacamole') return 'app'
@@ -889,8 +916,6 @@ function App() {
       return `http://localhost:${config.port || 3000}`
     } else if (appId === 'prometheus') {
       return `http://localhost:${config.port || 9090}`
-    } else if (appId === 'loki') {
-      return `http://localhost:${config.port || 3100}`
     } else if (appId === 'dozzle') {
       return `http://localhost:${config.port || 8888}`
     } else if (appId === 'nodered') {
@@ -952,6 +977,16 @@ function App() {
             <div className="category global-settings">
               <h2>Global Settings</h2>
               <div className="config-grid">
+                <div className="config-row">
+                  <label>Stack Name:</label>
+                  <input
+                    type="text"
+                    value={globalSettings.stack_name}
+                    onChange={(e) => setGlobalSettings({...globalSettings, stack_name: e.target.value})}
+                    placeholder="iiot-stack"
+                  />
+                  <span className="field-hint">Name for your stack (used in container/network names)</span>
+                </div>
                 <div className="config-row">
                   <label>Timezone:</label>
                   <select

@@ -1285,3 +1285,36 @@ input:checked + .toggle-slider:before {
   margin-top: 1rem;
 }
 
+/* Password toggle button */
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+  opacity: 0.8;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.password-toggle-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.password-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+/* Dark mode enhancement */
+[data-theme="dark"] .password-toggle-btn {
+  opacity: 0.9;
+  filter: brightness(1.2);
+}
+
+[data-theme="dark"] .password-toggle-btn:hover {
+  opacity: 1;
+  filter: brightness(1.4);
+}
+
