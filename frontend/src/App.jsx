@@ -3,7 +3,7 @@ import axios from 'axios'
 import './App.css'
 import { downloadEncryptedConfig, importEncryptedConfig, validateConfigStructure } from './crypto'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 function App() {
   const [darkMode, setDarkMode] = useState(true) // Default to dark mode
