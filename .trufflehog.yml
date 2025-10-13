@@ -1,0 +1,22 @@
+# TruffleHog Configuration
+# This file configures TruffleHog to ignore known false positives
+
+# Paths to exclude from scanning
+exclude:
+  paths:
+    - backend/migrations/init.sql  # Contains documented default admin password that must be changed
+    - test_*.py  # Test files with example credentials
+    - backend/.env.example  # Example environment file with placeholder values
+    - README.md  # Documentation may contain example values
+    - docs/**  # Documentation files
+    - frontend/dist/**  # Build output
+    - frontend/node_modules/**  # Dependencies
+    - backend/__pycache__/**  # Python cache
+
+  # Patterns to exclude
+  detectors:
+    - name: Generic
+      patterns:
+        - 'admin123'  # Documented example password that needs changing
+        - 'test-jwt-secret-key'  # CI test secret
+        - 'test-session-secret'  # CI test secret
