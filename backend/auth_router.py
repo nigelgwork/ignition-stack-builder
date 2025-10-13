@@ -7,19 +7,27 @@ from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
-from auth_utils import (create_access_token, create_refresh_token,
-                        generate_backup_codes, generate_mfa_qr_code,
-                        generate_mfa_secret, generate_verification_token,
-                        hash_password, is_valid_email,
-                        validate_password_strength, verify_mfa_code,
-                        verify_password, verify_token)
-from database import get_db
-from fastapi import (APIRouter, Depends, HTTPException, Request, Response,
-                     status)
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from models import AuditLog, MFABackupCode, RefreshToken, User, UserSettings
 from pydantic import BaseModel, EmailStr, Field, field_serializer
 from sqlalchemy.orm import Session
+
+from auth_utils import (
+    create_access_token,
+    create_refresh_token,
+    generate_backup_codes,
+    generate_mfa_qr_code,
+    generate_mfa_secret,
+    generate_verification_token,
+    hash_password,
+    is_valid_email,
+    validate_password_strength,
+    verify_mfa_code,
+    verify_password,
+    verify_token,
+)
+from database import get_db
+from models import AuditLog, MFABackupCode, RefreshToken, User, UserSettings
 
 logger = logging.getLogger(__name__)
 

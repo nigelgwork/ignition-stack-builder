@@ -86,8 +86,14 @@ def init_db():
     """Initialize database tables"""
     try:
         # Import all models here to ensure they're registered with Base
-        from models import (AuditLog, MFABackupCode, RefreshToken, User,
-                            UserSettings, UserStack)
+        from models import (
+            AuditLog,
+            MFABackupCode,
+            RefreshToken,
+            User,
+            UserSettings,
+            UserStack,
+        )
 
         # Create all tables
         Base.metadata.create_all(bind=engine)

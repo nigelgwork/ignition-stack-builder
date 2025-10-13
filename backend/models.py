@@ -4,12 +4,21 @@ Database models for authentication and user management
 
 import uuid
 
-from database import Base
-from sqlalchemy import (JSON, Boolean, Column, DateTime, ForeignKey, Integer,
-                        String, Text)
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
+from database import Base
 
 
 class User(Base):
