@@ -1,25 +1,26 @@
 """
 Authentication router - handles registration, login, MFA, and user management
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr, Field, field_serializer
-from typing import Optional
-from datetime import datetime, timedelta
-from uuid import UUID
-import logging
 
+import logging
+from datetime import datetime, timedelta
+from typing import Optional
+from uuid import UUID
+
+from fastapi import (APIRouter, Depends, HTTPException, Request, Response,
+                     status)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, EmailStr, Field, field_serializer
+from sqlalchemy.orm import Session
+
+from auth_utils import (create_access_token, create_refresh_token,
+                        generate_backup_codes, generate_mfa_qr_code,
+                        generate_mfa_secret, generate_verification_token,
+                        hash_password, is_valid_email,
+                        validate_password_strength, verify_mfa_code,
+                        verify_password, verify_token)
 from database import get_db
-from models import User, UserSettings, RefreshToken, AuditLog, MFABackupCode
-from auth_utils import (
-    hash_password, verify_password,
-    create_access_token, create_refresh_token,
-    verify_token, generate_mfa_secret,
-    generate_mfa_qr_code, verify_mfa_code,
-    generate_backup_codes, validate_password_strength,
-    is_valid_email, generate_verification_token
-)
+from models import AuditLog, MFABackupCode, RefreshToken, User, UserSettings
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ security = HTTPBearer()
 # ======================
 # Pydantic Models (Request/Response)
 # ======================
+
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -43,7 +45,9 @@ class UserLogin(BaseModel):
 
 
 class MFAVerify(BaseModel):
-    code: str = Field(..., min_length=6, max_length=20)  # Support TOTP (6) and backup codes (longer)
+    code: str = Field(
+        ..., min_length=6, max_length=20
+    )  # Support TOTP (6) and backup codes (longer)
 
 
 class MFASetup(BaseModel):
@@ -71,7 +75,7 @@ class UserResponse(BaseModel):
     mfa_enabled: bool
     created_at: datetime
 
-    @field_serializer('id')
+    @field_serializer("id")
     def serialize_id(self, value: UUID) -> str:
         """Convert UUID to string for JSON serialization"""
         return str(value)
@@ -90,12 +94,13 @@ class MFASetupResponse(BaseModel):
 # Helper Functions
 # ======================
 
+
 def log_audit(
     db: Session,
     user_id: Optional[str],
     action: str,
     request: Request,
-    details: Optional[dict] = None
+    details: Optional[dict] = None,
 ):
     """Log security audit event"""
     try:
@@ -104,7 +109,7 @@ def log_audit(
             action=action,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
-            details=details or {}
+            details=details or {},
         )
         db.add(audit)
         db.commit()
@@ -114,7 +119,7 @@ def log_audit(
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> User:
     """
     Dependency to get current authenticated user from JWT token
@@ -132,21 +137,18 @@ def get_current_user(
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
         )
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
 
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive"
         )
 
     return user
@@ -156,7 +158,10 @@ def get_current_user(
 # Authentication Endpoints
 # ======================
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
 def register(user_data: UserRegister, request: Request, db: Session = Depends(get_db)):
     """
     Register a new user
@@ -164,24 +169,19 @@ def register(user_data: UserRegister, request: Request, db: Session = Depends(ge
     # Validate email
     if not is_valid_email(user_data.email):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email format"
         )
 
     # Validate password strength
     is_valid, error_msg = validate_password_strength(user_data.password)
     if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email.lower()).first()
     if existing_user:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         )
 
     # Create new user
@@ -193,7 +193,7 @@ def register(user_data: UserRegister, request: Request, db: Session = Depends(ge
             is_active=True,
             is_verified=False,  # Require email verification in production
             verification_token=generate_verification_token(),
-            verification_token_expires=datetime.utcnow() + timedelta(hours=24)
+            verification_token_expires=datetime.utcnow() + timedelta(hours=24),
         )
 
         db.add(new_user)
@@ -217,12 +217,17 @@ def register(user_data: UserRegister, request: Request, db: Session = Depends(ge
         logger.error(f"Registration error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error creating user account"
+            detail="Error creating user account",
         )
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(user_data: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
+def login(
+    user_data: UserLogin,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     """
     Login and get access token
     """
@@ -235,25 +240,22 @@ def login(user_data: UserLogin, request: Request, response: Response, db: Sessio
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+            detail="Incorrect email or password",
         )
 
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive"
         )
 
     # If MFA is enabled, return temp token requiring MFA
     if user.mfa_enabled:
         temp_token = create_access_token(
             data={"sub": str(user.id), "mfa_pending": True},
-            expires_delta=timedelta(minutes=5)
+            expires_delta=timedelta(minutes=5),
         )
         return TokenResponse(
-            access_token=temp_token,
-            refresh_token="",
-            requires_mfa=True
+            access_token=temp_token, refresh_token="", requires_mfa=True
         )
 
     # Create tokens
@@ -264,8 +266,7 @@ def login(user_data: UserLogin, request: Request, response: Response, db: Sessio
     try:
         # Revoke any existing non-revoked refresh tokens for this user to prevent duplicates
         db.query(RefreshToken).filter(
-            RefreshToken.user_id == user.id,
-            RefreshToken.revoked == False
+            RefreshToken.user_id == user.id, RefreshToken.revoked == False
         ).update({"revoked": True, "revoked_at": datetime.utcnow()})
 
         # Commit the revocation first
@@ -274,7 +275,7 @@ def login(user_data: UserLogin, request: Request, response: Response, db: Sessio
         refresh_token_record = RefreshToken(
             user_id=user.id,
             token=refresh_token,
-            expires_at=datetime.utcnow() + timedelta(days=7)
+            expires_at=datetime.utcnow() + timedelta(days=7),
         )
         db.add(refresh_token_record)
 
@@ -289,10 +290,7 @@ def login(user_data: UserLogin, request: Request, response: Response, db: Sessio
     # Log successful login
     log_audit(db, str(user.id), "login_success", request)
 
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token
-    )
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/mfa/verify", response_model=TokenResponse)
@@ -300,7 +298,7 @@ def verify_mfa(
     mfa_data: MFAVerify,
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Verify MFA code and complete login
@@ -310,8 +308,7 @@ def verify_mfa(
 
     if not payload or not payload.get("mfa_pending"):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid MFA token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA token"
         )
 
     user_id = payload.get("sub")
@@ -320,16 +317,17 @@ def verify_mfa(
     if not user or not user.mfa_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MFA not enabled for this user"
+            detail="MFA not enabled for this user",
         )
 
     # Verify MFA code
     if not verify_mfa_code(user.mfa_secret, mfa_data.code):
         # Check backup codes
-        backup_codes = db.query(MFABackupCode).filter(
-            MFABackupCode.user_id == user.id,
-            MFABackupCode.used == False
-        ).all()
+        backup_codes = (
+            db.query(MFABackupCode)
+            .filter(MFABackupCode.user_id == user.id, MFABackupCode.used == False)
+            .all()
+        )
 
         code_valid = False
         for backup_code in backup_codes:
@@ -344,8 +342,7 @@ def verify_mfa(
         if not code_valid:
             log_audit(db, str(user.id), "mfa_failed", request)
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid MFA code"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code"
             )
 
     # Create full access tokens
@@ -355,8 +352,7 @@ def verify_mfa(
     # Store refresh token (revoke old ones first)
     try:
         db.query(RefreshToken).filter(
-            RefreshToken.user_id == user.id,
-            RefreshToken.revoked == False
+            RefreshToken.user_id == user.id, RefreshToken.revoked == False
         ).update({"revoked": True, "revoked_at": datetime.utcnow()})
 
         # Commit revocation first
@@ -365,7 +361,7 @@ def verify_mfa(
         refresh_token_record = RefreshToken(
             user_id=user.id,
             token=refresh_token,
-            expires_at=datetime.utcnow() + timedelta(days=7)
+            expires_at=datetime.utcnow() + timedelta(days=7),
         )
         db.add(refresh_token_record)
 
@@ -379,10 +375,7 @@ def verify_mfa(
     # Log successful MFA
     log_audit(db, str(user.id), "mfa_success", request)
 
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token
-    )
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 class RefreshTokenRequest(BaseModel):
@@ -390,7 +383,9 @@ class RefreshTokenRequest(BaseModel):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_access_token(token_data: RefreshTokenRequest, db: Session = Depends(get_db)):
+def refresh_access_token(
+    token_data: RefreshTokenRequest, db: Session = Depends(get_db)
+):
     """
     Refresh access token using refresh token
     """
@@ -398,20 +393,23 @@ def refresh_access_token(token_data: RefreshTokenRequest, db: Session = Depends(
 
     if not payload:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
     # Check if token exists and is not revoked
-    token_record = db.query(RefreshToken).filter(
-        RefreshToken.token == token_data.refresh_token,
-        RefreshToken.revoked == False
-    ).first()
+    token_record = (
+        db.query(RefreshToken)
+        .filter(
+            RefreshToken.token == token_data.refresh_token,
+            RefreshToken.revoked == False,
+        )
+        .first()
+    )
 
     if not token_record:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token not found or revoked"
+            detail="Refresh token not found or revoked",
         )
 
     user_id = payload.get("sub")
@@ -420,15 +418,14 @@ def refresh_access_token(token_data: RefreshTokenRequest, db: Session = Depends(
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive"
+            detail="User not found or inactive",
         )
 
     # Create new access token
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
 
     return TokenResponse(
-        access_token=access_token,
-        refresh_token=token_data.refresh_token
+        access_token=access_token, refresh_token=token_data.refresh_token
     )
 
 
@@ -436,7 +433,7 @@ def refresh_access_token(token_data: RefreshTokenRequest, db: Session = Depends(
 def logout(
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Logout (revoke refresh tokens)
@@ -444,8 +441,7 @@ def logout(
     try:
         # Revoke all user's refresh tokens
         db.query(RefreshToken).filter(
-            RefreshToken.user_id == current_user.id,
-            RefreshToken.revoked == False
+            RefreshToken.user_id == current_user.id, RefreshToken.revoked == False
         ).update({"revoked": True, "revoked_at": datetime.utcnow()})
 
         db.commit()
@@ -458,7 +454,7 @@ def logout(
         logger.error(f"Logout error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error during logout"
+            detail="Error during logout",
         )
 
 
@@ -474,19 +470,19 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
 # MFA Endpoints
 # ======================
 
+
 @router.post("/mfa/setup", response_model=MFASetupResponse)
 def setup_mfa(
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Setup MFA for user (generates secret and QR code)
     """
     if current_user.mfa_enabled:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MFA is already enabled"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="MFA is already enabled"
         )
 
     # Generate MFA secret
@@ -503,8 +499,7 @@ def setup_mfa(
     # Store backup codes (hashed)
     for code in backup_codes:
         backup_code = MFABackupCode(
-            user_id=current_user.id,
-            code_hash=hash_password(code)
+            user_id=current_user.id, code_hash=hash_password(code)
         )
         db.add(backup_code)
 
@@ -513,11 +508,7 @@ def setup_mfa(
     # Log MFA setup
     log_audit(db, str(current_user.id), "mfa_setup_initiated", request)
 
-    return MFASetupResponse(
-        secret=secret,
-        qr_code=qr_code,
-        backup_codes=backup_codes
-    )
+    return MFASetupResponse(secret=secret, qr_code=qr_code, backup_codes=backup_codes)
 
 
 @router.post("/mfa/enable")
@@ -525,28 +516,26 @@ def enable_mfa(
     mfa_data: MFAVerify,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Enable MFA after verifying a code
     """
     if current_user.mfa_enabled:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MFA is already enabled"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="MFA is already enabled"
         )
 
     if not current_user.mfa_secret:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MFA not setup. Call /mfa/setup first"
+            detail="MFA not setup. Call /mfa/setup first",
         )
 
     # Verify the code
     if not verify_mfa_code(current_user.mfa_secret, mfa_data.code):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid MFA code"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid MFA code"
         )
 
     # Enable MFA
@@ -564,22 +553,20 @@ def disable_mfa(
     mfa_data: MFAVerify,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Disable MFA (requires current MFA code)
     """
     if not current_user.mfa_enabled:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MFA is not enabled"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="MFA is not enabled"
         )
 
     # Verify the code
     if not verify_mfa_code(current_user.mfa_secret, mfa_data.code):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid MFA code"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code"
         )
 
     # Disable MFA
@@ -601,12 +588,13 @@ def disable_mfa(
 # Password Management
 # ======================
 
+
 @router.post("/password/change")
 def change_password(
     password_data: PasswordChange,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Change user password
@@ -615,16 +603,13 @@ def change_password(
     if not verify_password(password_data.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Current password is incorrect"
+            detail="Current password is incorrect",
         )
 
     # Validate new password
     is_valid, error_msg = validate_password_strength(password_data.new_password)
     if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     # Update password
     current_user.password_hash = hash_password(password_data.new_password)

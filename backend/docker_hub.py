@@ -1,11 +1,13 @@
 """
 Docker Hub API integration for fetching available image tags
 """
-import requests
-from typing import List
-from functools import lru_cache
-import re
+
 import logging
+import re
+from functools import lru_cache
+from typing import List
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -48,18 +50,18 @@ def get_ignition_versions() -> List[str]:
     all_tags = get_docker_tags("inductiveautomation/ignition", limit=200)
 
     # Filter for version tags (8.x.x format)
-    version_pattern = re.compile(r'^8\.\d+\.\d+$')
+    version_pattern = re.compile(r"^8\.\d+\.\d+$")
     versions = [tag for tag in all_tags if version_pattern.match(tag)]
 
     # Sort versions (newest first)
     def version_key(v):
-        parts = v.split('.')
+        parts = v.split(".")
         return (int(parts[0]), int(parts[1]), int(parts[2]))
 
     versions.sort(key=version_key, reverse=True)
 
     # Add 'latest' at the beginning
-    return ['latest'] + versions[:20]  # Limit to 20 most recent versions
+    return ["latest"] + versions[:20]  # Limit to 20 most recent versions
 
 
 def get_postgres_versions() -> List[str]:
@@ -67,7 +69,7 @@ def get_postgres_versions() -> List[str]:
     all_tags = get_docker_tags("library/postgres", limit=100)
 
     # Filter for version tags and alpine variants
-    version_pattern = re.compile(r'^(\d+)(-alpine)?$')
+    version_pattern = re.compile(r"^(\d+)(-alpine)?$")
     versions = [tag for tag in all_tags if version_pattern.match(tag)]
 
-    return ['latest'] + versions[:15]
+    return ["latest"] + versions[:15]

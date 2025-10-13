@@ -1,17 +1,19 @@
 """
 Authentication utilities: JWT, password hashing, MFA
 """
+
+import base64
+import io
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from typing import Any, Dict, Optional
+
 import pyotp
 import qrcode
-import io
-import base64
-import logging
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +23,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT Configuration
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_TO_RANDOM_SECRET_KEY")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+)
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 
 # ======================
 # Password Functions
 # ======================
+
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""
@@ -47,7 +52,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # JWT Token Functions
 # ======================
 
-def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+
+def create_access_token(
+    data: Dict[str, Any], expires_delta: Optional[timedelta] = None
+) -> str:
     """
     Create a JWT access token
 
@@ -65,11 +73,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     else:
         expire = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "type": "access"
-    })
+    to_encode.update({"exp": expire, "iat": datetime.utcnow(), "type": "access"})
 
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
@@ -88,11 +92,7 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
 
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "type": "refresh"
-    })
+    to_encode.update({"exp": expire, "iat": datetime.utcnow(), "type": "refresh"})
 
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
@@ -137,7 +137,9 @@ def verify_token(token: str, token_type: str = "access") -> Optional[Dict[str, A
 
     # Check token type
     if payload.get("type") != token_type:
-        logger.warning(f"Token type mismatch: expected {token_type}, got {payload.get('type')}")
+        logger.warning(
+            f"Token type mismatch: expected {token_type}, got {payload.get('type')}"
+        )
         return None
 
     # Check expiration
@@ -153,12 +155,15 @@ def verify_token(token: str, token_type: str = "access") -> Optional[Dict[str, A
 # MFA Functions
 # ======================
 
+
 def generate_mfa_secret() -> str:
     """Generate a random secret for TOTP MFA"""
     return pyotp.random_base32()
 
 
-def generate_mfa_qr_code(email: str, secret: str, issuer: str = "IIoT Stack Builder") -> str:
+def generate_mfa_qr_code(
+    email: str, secret: str, issuer: str = "IIoT Stack Builder"
+) -> str:
     """
     Generate a QR code for MFA setup
 
@@ -172,10 +177,7 @@ def generate_mfa_qr_code(email: str, secret: str, issuer: str = "IIoT Stack Buil
     """
     # Generate provisioning URI
     totp = pyotp.TOTP(secret)
-    provisioning_uri = totp.provisioning_uri(
-        name=email,
-        issuer_name=issuer
-    )
+    provisioning_uri = totp.provisioning_uri(name=email, issuer_name=issuer)
 
     # Generate QR code
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -236,6 +238,7 @@ def generate_backup_codes(count: int = 10) -> list:
 # Token Utilities
 # ======================
 
+
 def generate_verification_token() -> str:
     """Generate a secure random token for email verification"""
     return secrets.token_urlsafe(32)
@@ -249,6 +252,7 @@ def generate_password_reset_token() -> str:
 # ======================
 # Validation Functions
 # ======================
+
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """
@@ -275,7 +279,10 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     # Optional: Check for special characters
     special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
     if not any(c in special_chars for c in password):
-        return False, f"Password must contain at least one special character ({special_chars})"
+        return (
+            False,
+            f"Password must contain at least one special character ({special_chars})",
+        )
 
     return True, ""
 
@@ -283,5 +290,6 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
 def is_valid_email(email: str) -> bool:
     """Basic email validation"""
     import re
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     return bool(re.match(pattern, email))

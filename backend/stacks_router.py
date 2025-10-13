@@ -1,18 +1,20 @@
 """
 User stacks management router - CRUD operations for saved stacks
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field, field_serializer
-from typing import Optional, List
-from datetime import datetime
-from uuid import UUID
+
 import logging
 import uuid
+from datetime import datetime
+from typing import List, Optional
+from uuid import UUID
 
-from database import get_db
-from models import User, UserStack, AuditLog
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field, field_serializer
+from sqlalchemy.orm import Session
+
 from auth_router import get_current_user
+from database import get_db
+from models import AuditLog, User, UserStack
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,7 @@ router = APIRouter(prefix="/stacks", tags=["stacks"])
 # ======================
 # Pydantic Models
 # ======================
+
 
 class StackCreate(BaseModel):
     stack_name: str = Field(..., min_length=1, max_length=255)
@@ -48,7 +51,7 @@ class StackResponse(BaseModel):
     updated_at: datetime
     last_accessed: Optional[datetime]
 
-    @field_serializer('id', 'user_id')
+    @field_serializer("id", "user_id")
     def serialize_uuid(self, value: UUID) -> str:
         """Convert UUID to string for JSON serialization"""
         return str(value)
@@ -63,7 +66,7 @@ def log_audit(
     action: str,
     request: Request,
     resource_id: Optional[str] = None,
-    details: Optional[dict] = None
+    details: Optional[dict] = None,
 ):
     """Log audit event"""
     try:
@@ -74,7 +77,7 @@ def log_audit(
             resource_id=resource_id,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
-            details=details or {}
+            details=details or {},
         )
         db.add(audit)
         db.commit()
@@ -86,12 +89,13 @@ def log_audit(
 # Stack Management Endpoints
 # ======================
 
+
 @router.post("/", response_model=StackResponse, status_code=status.HTTP_201_CREATED)
 def create_stack(
     stack_data: StackCreate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Create a new stack configuration
@@ -102,7 +106,7 @@ def create_stack(
             stack_name=stack_data.stack_name,
             description=stack_data.description,
             config_json=stack_data.config_json,
-            is_public=stack_data.is_public
+            is_public=stack_data.is_public,
         )
 
         db.add(new_stack)
@@ -116,7 +120,7 @@ def create_stack(
             "stack_created",
             request,
             str(new_stack.id),
-            {"stack_name": stack_data.stack_name}
+            {"stack_name": stack_data.stack_name},
         )
 
         logger.info(f"Stack created: {new_stack.stack_name} by {current_user.email}")
@@ -127,7 +131,7 @@ def create_stack(
         logger.error(f"Error creating stack: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error creating stack"
+            detail="Error creating stack",
         )
 
 
@@ -136,16 +140,19 @@ def get_user_stacks(
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get all stacks for current user
     """
-    stacks = db.query(UserStack).filter(
-        UserStack.user_id == current_user.id
-    ).order_by(
-        UserStack.updated_at.desc()
-    ).offset(skip).limit(limit).all()
+    stacks = (
+        db.query(UserStack)
+        .filter(UserStack.user_id == current_user.id)
+        .order_by(UserStack.updated_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     return stacks
 
@@ -155,7 +162,7 @@ def get_stack(
     stack_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get a specific stack by ID
@@ -164,19 +171,18 @@ def get_stack(
         stack_uuid = uuid.UUID(stack_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid stack ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack ID format"
         )
 
-    stack = db.query(UserStack).filter(
-        UserStack.id == stack_uuid,
-        UserStack.user_id == current_user.id
-    ).first()
+    stack = (
+        db.query(UserStack)
+        .filter(UserStack.id == stack_uuid, UserStack.user_id == current_user.id)
+        .first()
+    )
 
     if not stack:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Stack not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stack not found"
         )
 
     # Update last accessed
@@ -192,7 +198,7 @@ def update_stack(
     stack_data: StackUpdate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Update a stack configuration
@@ -201,19 +207,18 @@ def update_stack(
         stack_uuid = uuid.UUID(stack_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid stack ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack ID format"
         )
 
-    stack = db.query(UserStack).filter(
-        UserStack.id == stack_uuid,
-        UserStack.user_id == current_user.id
-    ).first()
+    stack = (
+        db.query(UserStack)
+        .filter(UserStack.id == stack_uuid, UserStack.user_id == current_user.id)
+        .first()
+    )
 
     if not stack:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Stack not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stack not found"
         )
 
     try:
@@ -237,7 +242,7 @@ def update_stack(
             "stack_updated",
             request,
             str(stack.id),
-            {"stack_name": stack.stack_name}
+            {"stack_name": stack.stack_name},
         )
 
         logger.info(f"Stack updated: {stack.stack_name} by {current_user.email}")
@@ -248,7 +253,7 @@ def update_stack(
         logger.error(f"Error updating stack: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error updating stack"
+            detail="Error updating stack",
         )
 
 
@@ -257,7 +262,7 @@ def delete_stack(
     stack_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Delete a stack
@@ -266,19 +271,18 @@ def delete_stack(
         stack_uuid = uuid.UUID(stack_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid stack ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack ID format"
         )
 
-    stack = db.query(UserStack).filter(
-        UserStack.id == stack_uuid,
-        UserStack.user_id == current_user.id
-    ).first()
+    stack = (
+        db.query(UserStack)
+        .filter(UserStack.id == stack_uuid, UserStack.user_id == current_user.id)
+        .first()
+    )
 
     if not stack:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Stack not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stack not found"
         )
 
     try:
@@ -293,7 +297,7 @@ def delete_stack(
             "stack_deleted",
             request,
             str(stack_id),
-            {"stack_name": stack_name}
+            {"stack_name": stack_name},
         )
 
         logger.info(f"Stack deleted: {stack_name} by {current_user.email}")
@@ -303,23 +307,22 @@ def delete_stack(
         logger.error(f"Error deleting stack: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error deleting stack"
+            detail="Error deleting stack",
         )
 
 
 @router.get("/public/list", response_model=List[StackResponse])
-def get_public_stacks(
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db)
-):
+def get_public_stacks(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """
     Get public stacks (available to all users)
     """
-    stacks = db.query(UserStack).filter(
-        UserStack.is_public == True
-    ).order_by(
-        UserStack.created_at.desc()
-    ).offset(skip).limit(limit).all()
+    stacks = (
+        db.query(UserStack)
+        .filter(UserStack.is_public == True)
+        .order_by(UserStack.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     return stacks

@@ -1,14 +1,16 @@
 """
 Database configuration and session management
 """
+
+import logging
 import os
+from contextlib import contextmanager
 from pathlib import Path
+
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from contextlib import contextmanager
-import logging
 
 # Load .env file
 env_path = Path(__file__).parent / ".env"
@@ -26,7 +28,7 @@ AUTH_DB_PASSWORD = os.getenv("AUTH_DB_PASSWORD", "changeme")
 # Construct database URL
 DATABASE_URL = os.getenv(
     "AUTH_DATABASE_URL",
-    f"postgresql://{AUTH_DB_USER}:{AUTH_DB_PASSWORD}@{AUTH_DB_HOST}:{AUTH_DB_PORT}/{AUTH_DB_NAME}"
+    f"postgresql://{AUTH_DB_USER}:{AUTH_DB_PASSWORD}@{AUTH_DB_HOST}:{AUTH_DB_PORT}/{AUTH_DB_NAME}",
 )
 
 # Create engine
@@ -35,7 +37,7 @@ engine = create_engine(
     pool_pre_ping=True,  # Enable connection pool pre-ping to check connections
     pool_size=10,
     max_overflow=20,
-    echo=os.getenv("DEBUG", "False").lower() == "true"  # Log SQL queries in debug mode
+    echo=os.getenv("DEBUG", "False").lower() == "true",  # Log SQL queries in debug mode
 )
 
 # Create session factory
@@ -84,7 +86,8 @@ def init_db():
     """Initialize database tables"""
     try:
         # Import all models here to ensure they're registered with Base
-        from models import User, UserStack, UserSettings, RefreshToken, AuditLog, MFABackupCode
+        from models import (AuditLog, MFABackupCode, RefreshToken, User,
+                            UserSettings, UserStack)
 
         # Create all tables
         Base.metadata.create_all(bind=engine)

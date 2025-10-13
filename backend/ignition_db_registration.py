@@ -2,7 +2,8 @@
 Ignition Gateway Database Auto-Registration Script Generator
 Creates Python scripts to automatically register databases in Ignition Gateway
 """
-from typing import List, Dict, Any
+
+from typing import Any, Dict, List
 
 
 def generate_ignition_db_registration_script(
@@ -10,7 +11,7 @@ def generate_ignition_db_registration_script(
     ignition_port: int,
     admin_username: str,
     admin_password: str,
-    databases: List[Dict[str, Any]]
+    databases: List[Dict[str, Any]],
 ) -> str:
     """
     Generate a Python script that auto-registers databases in Ignition Gateway
@@ -57,17 +58,20 @@ def generate_ignition_db_registration_script(
         else:
             continue
 
-        db_configs.append({
-            "name": f"{db_type.upper()}-{instance_name}",
-            "jdbc_url": jdbc_url,
-            "driver": driver,
-            "username": username,
-            "password": password,
-            "validation_query": validation_query
-        })
+        db_configs.append(
+            {
+                "name": f"{db_type.upper()}-{instance_name}",
+                "jdbc_url": jdbc_url,
+                "driver": driver,
+                "username": username,
+                "password": password,
+                "validation_query": validation_query,
+            }
+        )
 
     # Generate the Python script
     import json as json_module  # Import here to use in f-string
+
     script = f"""#!/usr/bin/env python3
 \"\"\"
 Ignition Gateway Database Auto-Registration Script

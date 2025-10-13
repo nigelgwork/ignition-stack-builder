@@ -2,42 +2,43 @@
 IIoT Stack Builder API
 FastAPI backend for generating Docker Compose stacks for industrial IoT applications.
 """
-from fastapi import FastAPI, HTTPException, UploadFile, File
+
+import base64
+import io
+import json
+import logging
+import zipfile
+from typing import Any, Dict, List, Optional
+
+import yaml
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-import json
-import yaml
-import io
-import zipfile
-import base64
-import logging
-from docker_hub import get_ignition_versions, get_postgres_versions, get_docker_tags
-from integration_engine import get_integration_engine
-from config_generator import (
-    generate_mosquitto_config,
-    generate_mosquitto_password_file,
-    generate_grafana_datasources,
-    generate_traefik_static_config,
-    generate_traefik_dynamic_config,
-    generate_oauth_env_vars,
-    generate_email_env_vars,
-    generate_prometheus_config
-)
-from ntfy_monitor import generate_ntfy_monitor_script, generate_ntfy_readme_section
-from keycloak_generator import generate_keycloak_realm, generate_keycloak_readme_section
-from ignition_db_registration import (
-    generate_ignition_db_registration_script,
-    generate_ignition_db_readme_section,
-    generate_requirements_file
-)
 
 # Import authentication and user management routers
 import auth_router
-import stacks_router
 import settings_router
+import stacks_router
+from config_generator import (generate_email_env_vars,
+                              generate_grafana_datasources,
+                              generate_mosquitto_config,
+                              generate_mosquitto_password_file,
+                              generate_oauth_env_vars,
+                              generate_prometheus_config,
+                              generate_traefik_dynamic_config,
+                              generate_traefik_static_config)
 from database import check_db_connection
+from docker_hub import (get_docker_tags, get_ignition_versions,
+                        get_postgres_versions)
+from ignition_db_registration import (generate_ignition_db_readme_section,
+                                      generate_ignition_db_registration_script,
+                                      generate_requirements_file)
+from integration_engine import get_integration_engine
+from keycloak_generator import (generate_keycloak_readme_section,
+                                generate_keycloak_realm)
+from ntfy_monitor import (generate_ntfy_monitor_script,
+                          generate_ntfy_readme_section)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +60,7 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(stacks_router.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")
 
+
 # Database connection check on startup
 @app.on_event("startup")
 async def startup_event():
@@ -69,20 +71,25 @@ async def startup_event():
     else:
         logger.warning("⚠ Database connection failed - auth features may not work")
 
+
 def load_catalog():
     """Load the application catalog from catalog.json"""
     with open("catalog.json", "r") as f:
         return json.load(f)
 
+
 class InstanceConfig(BaseModel):
     """Configuration for a single service instance"""
+
     app_id: str
     instance_name: str
     config: Dict[str, Any]
     instanceId: Optional[float] = None
 
+
 class GlobalSettings(BaseModel):
     """Global settings for the entire stack"""
+
     stack_name: str = "iiot-stack"
     timezone: str = "Australia/Adelaide"
     restart_policy: str = "unless-stopped"
@@ -90,46 +97,51 @@ class GlobalSettings(BaseModel):
     ntfy_server: str = "https://ntfy.sh"
     ntfy_topic: str = ""
 
+
 class IntegrationSettings(BaseModel):
     """Settings for automatic integrations"""
+
     reverse_proxy: Optional[Dict[str, Any]] = {
         "base_domain": "localhost",
         "enable_https": False,
-        "letsencrypt_email": ""
+        "letsencrypt_email": "",
     }
     mqtt: Optional[Dict[str, Any]] = {
         "enable_tls": False,
         "username": "",
         "password": "",
-        "tls_port": 8883
+        "tls_port": 8883,
     }
     oauth: Optional[Dict[str, Any]] = {
         "realm_name": "iiot",
-        "auto_configure_services": True
+        "auto_configure_services": True,
     }
-    database: Optional[Dict[str, Any]] = {
-        "auto_register": True
-    }
+    database: Optional[Dict[str, Any]] = {"auto_register": True}
     email: Optional[Dict[str, Any]] = {
         "from_address": "noreply@iiot.local",
-        "auto_configure_services": True
+        "auto_configure_services": True,
     }
+
 
 class StackConfig(BaseModel):
     """Complete stack configuration with instances and global settings"""
+
     instances: List[InstanceConfig]
     integrations: List[str] = []
     global_settings: Optional[GlobalSettings] = None
     integration_settings: Optional[IntegrationSettings] = None
 
+
 @app.get("/")
 def read_root():
     return {"message": "IIoT Stack Builder API", "version": "1.0.0"}
+
 
 @app.get("/api/catalog")
 def get_catalog():
     """Get the application catalog"""
     return load_catalog()
+
 
 @app.post("/validate-config")
 def validate_config(config: StackConfig):
@@ -142,28 +154,27 @@ def validate_config(config: StackConfig):
         for instance in config.instances:
             if instance.app_id not in catalog_dict:
                 raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid app_id: {instance.app_id}"
+                    status_code=400, detail=f"Invalid app_id: {instance.app_id}"
                 )
 
             app = catalog_dict[instance.app_id]
             if not app.get("enabled", False):
                 raise HTTPException(
-                    status_code=400,
-                    detail=f"App {instance.app_id} is not enabled"
+                    status_code=400, detail=f"App {instance.app_id} is not enabled"
                 )
 
         # Return validated config
         return {
             "valid": True,
             "config": config.dict(),
-            "message": "Configuration is valid"
+            "message": "Configuration is valid",
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Config validation error: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Invalid configuration: {str(e)}")
+
 
 @app.get("/versions/{app_id}")
 def get_versions(app_id: str):
@@ -195,6 +206,7 @@ def get_versions(app_id: str):
             return {"versions": app.get("available_versions", ["latest"])}
         return {"versions": ["latest"]}
 
+
 @app.post("/upload-module")
 async def upload_module(file: UploadFile = File(...)):
     """
@@ -202,22 +214,19 @@ async def upload_module(file: UploadFile = File(...)):
     Returns base64 encoded file content that can be included in the stack
     """
     try:
-        if not file.filename.endswith('.modl'):
+        if not file.filename.endswith(".modl"):
             raise HTTPException(status_code=400, detail="Only .modl files are allowed")
 
         # Read file content
         content = await file.read()
 
         # Encode as base64 for storage/transfer
-        encoded = base64.b64encode(content).decode('utf-8')
+        encoded = base64.b64encode(content).decode("utf-8")
 
-        return {
-            "filename": file.filename,
-            "size": len(content),
-            "encoded": encoded
-        }
+        return {"filename": file.filename, "size": len(content), "encoded": encoded}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/detect-integrations")
 def detect_integrations(stack_config: StackConfig):
@@ -231,7 +240,7 @@ def detect_integrations(stack_config: StackConfig):
             {
                 "app_id": inst.app_id,
                 "instance_name": inst.instance_name,
-                "config": inst.config
+                "config": inst.config,
             }
             for inst in stack_config.instances
         ]
@@ -249,6 +258,7 @@ def detect_integrations(stack_config: StackConfig):
         logger.error(f"Error detecting integrations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/generate")
 def generate_stack(stack_config: StackConfig):
     """Generate docker-compose.yml and configuration files"""
@@ -260,14 +270,16 @@ def generate_stack(stack_config: StackConfig):
         global_settings = stack_config.global_settings or GlobalSettings()
 
         # Get integration settings
-        integration_settings = stack_config.integration_settings or IntegrationSettings()
+        integration_settings = (
+            stack_config.integration_settings or IntegrationSettings()
+        )
 
         # Detect integrations
         instances_for_detection = [
             {
                 "app_id": inst.app_id,
                 "instance_name": inst.instance_name,
-                "config": inst.config
+                "config": inst.config,
             }
             for inst in stack_config.instances
         ]
@@ -279,12 +291,8 @@ def generate_stack(stack_config: StackConfig):
         compose = {
             "name": stack_name,
             "services": {},
-            "networks": {
-                f"{stack_name}-network": {
-                    "driver": "bridge"
-                }
-            },
-            "volumes": {}
+            "networks": {f"{stack_name}-network": {"driver": "bridge"}},
+            "volumes": {},
         }
 
         # Track generated config files
@@ -298,22 +306,29 @@ def generate_stack(stack_config: StackConfig):
 
         # Check if Traefik is in the stack
         has_traefik = any(inst.app_id == "traefik" for inst in stack_config.instances)
-        has_oauth_provider = "oauth_provider" in integration_results.get("integrations", {})
-        has_email_testing = "email_testing" in integration_results.get("integrations", {})
+        has_oauth_provider = "oauth_provider" in integration_results.get(
+            "integrations", {}
+        )
+        has_email_testing = "email_testing" in integration_results.get(
+            "integrations", {}
+        )
         has_mqtt_broker = "mqtt_broker" in integration_results.get("integrations", {})
 
         # Pre-generate Keycloak realm configuration if needed (for OAuth client secrets)
         keycloak_clients = []
         keycloak_realm_config = None
-        if has_oauth_provider and integration_settings.oauth.get("auto_configure_services", True):
+        if has_oauth_provider and integration_settings.oauth.get(
+            "auto_configure_services", True
+        ):
             oauth_int = integration_results["integrations"]["oauth_provider"]
-            keycloak_providers = [p for p in oauth_int.get("providers", []) if p == "keycloak"]
+            keycloak_providers = [
+                p for p in oauth_int.get("providers", []) if p == "keycloak"
+            ]
 
             if keycloak_providers:
                 # Get list of services that will be OAuth clients
                 oauth_client_services = [
-                    client["service_id"]
-                    for client in oauth_int.get("clients", [])
+                    client["service_id"] for client in oauth_int.get("clients", [])
                 ]
 
                 # Get users from integration settings
@@ -321,15 +336,19 @@ def generate_stack(stack_config: StackConfig):
 
                 # Generate realm configuration
                 realm_name = integration_settings.oauth.get("realm_name", "iiot")
-                base_domain = integration_settings.reverse_proxy.get("base_domain", "localhost")
-                enable_https = integration_settings.reverse_proxy.get("enable_https", False)
+                base_domain = integration_settings.reverse_proxy.get(
+                    "base_domain", "localhost"
+                )
+                enable_https = integration_settings.reverse_proxy.get(
+                    "enable_https", False
+                )
 
                 keycloak_realm_config = generate_keycloak_realm(
                     realm_name=realm_name,
                     services=oauth_client_services,
                     users=realm_users,
                     base_domain=base_domain,
-                    enable_https=enable_https
+                    enable_https=enable_https,
                 )
 
                 # Store clients for use in OAuth env vars and README
@@ -346,20 +365,20 @@ def generate_stack(stack_config: StackConfig):
                     config={
                         "port": 5050,
                         "email": "admin@admin.com",
-                        "password": "admin"
+                        "password": "admin",
                     },
-                    instanceId=None
+                    instanceId=None,
                 )
                 instances_to_process.append(pgadmin_instance)
-            elif instance.app_id == "mariadb" and instance.config.get("include_phpmyadmin"):
+            elif instance.app_id == "mariadb" and instance.config.get(
+                "include_phpmyadmin"
+            ):
                 # Add phpMyAdmin instance
                 phpmyadmin_instance = InstanceConfig(
                     app_id="phpmyadmin",
                     instance_name="phpmyadmin",
-                    config={
-                        "port": 8080
-                    },
-                    instanceId=None
+                    config={"port": 8080},
+                    instanceId=None,
                 )
                 instances_to_process.append(phpmyadmin_instance)
 
@@ -381,7 +400,7 @@ def generate_stack(stack_config: StackConfig):
                 "image": image,
                 "container_name": f"{stack_name}-{service_name}",
                 "networks": [f"{stack_name}-network"],
-                "restart": global_settings.restart_policy
+                "restart": global_settings.restart_policy,
             }
 
             # Handle ports
@@ -395,9 +414,13 @@ def generate_stack(stack_config: StackConfig):
                             host_port = config.get("port", port_mapping.split(":")[0])
                         elif instance.app_id == "ignition":
                             if container_port == "8088":
-                                host_port = config.get("http_port", port_mapping.split(":")[0])
+                                host_port = config.get(
+                                    "http_port", port_mapping.split(":")[0]
+                                )
                             elif container_port == "8043":
-                                host_port = config.get("https_port", port_mapping.split(":")[0])
+                                host_port = config.get(
+                                    "https_port", port_mapping.split(":")[0]
+                                )
                             else:
                                 host_port = port_mapping.split(":")[0]
                         elif instance.app_id == "keycloak":
@@ -412,7 +435,10 @@ def generate_stack(stack_config: StackConfig):
                             else:
                                 host_port = port_mapping.split(":")[0]
                         else:
-                            host_port = config.get("port", config.get("http_port", port_mapping.split(":")[0]))
+                            host_port = config.get(
+                                "port",
+                                config.get("http_port", port_mapping.split(":")[0]),
+                            )
 
                         ports.append(f"{host_port}:{container_port}")
                     else:
@@ -427,29 +453,51 @@ def generate_stack(stack_config: StackConfig):
                 # Update with configured values based on app type
                 if instance.app_id == "postgres":
                     env["POSTGRES_DB"] = config.get("database", env.get("POSTGRES_DB"))
-                    env["POSTGRES_USER"] = config.get("username", env.get("POSTGRES_USER"))
-                    env["POSTGRES_PASSWORD"] = config.get("password", env.get("POSTGRES_PASSWORD"))
+                    env["POSTGRES_USER"] = config.get(
+                        "username", env.get("POSTGRES_USER")
+                    )
+                    env["POSTGRES_PASSWORD"] = config.get(
+                        "password", env.get("POSTGRES_PASSWORD")
+                    )
 
                 elif instance.app_id == "mariadb":
-                    env["MYSQL_DATABASE"] = config.get("database", env.get("MYSQL_DATABASE"))
+                    env["MYSQL_DATABASE"] = config.get(
+                        "database", env.get("MYSQL_DATABASE")
+                    )
                     env["MYSQL_USER"] = config.get("username", env.get("MYSQL_USER"))
-                    env["MYSQL_PASSWORD"] = config.get("password", env.get("MYSQL_PASSWORD"))
-                    env["MYSQL_ROOT_PASSWORD"] = config.get("root_password", env.get("MYSQL_ROOT_PASSWORD"))
+                    env["MYSQL_PASSWORD"] = config.get(
+                        "password", env.get("MYSQL_PASSWORD")
+                    )
+                    env["MYSQL_ROOT_PASSWORD"] = config.get(
+                        "root_password", env.get("MYSQL_ROOT_PASSWORD")
+                    )
 
                 elif instance.app_id == "mssql":
-                    env["SA_PASSWORD"] = config.get("sa_password", env.get("SA_PASSWORD"))
+                    env["SA_PASSWORD"] = config.get(
+                        "sa_password", env.get("SA_PASSWORD")
+                    )
                     env["MSSQL_PID"] = config.get("edition", env.get("MSSQL_PID"))
 
                 elif instance.app_id == "ignition":
-                    env["GATEWAY_ADMIN_USERNAME"] = config.get("admin_username", env.get("GATEWAY_ADMIN_USERNAME"))
-                    env["GATEWAY_ADMIN_PASSWORD"] = config.get("admin_password", env.get("GATEWAY_ADMIN_PASSWORD"))
-                    env["IGNITION_EDITION"] = config.get("edition", env.get("IGNITION_EDITION", "standard"))
+                    env["GATEWAY_ADMIN_USERNAME"] = config.get(
+                        "admin_username", env.get("GATEWAY_ADMIN_USERNAME")
+                    )
+                    env["GATEWAY_ADMIN_PASSWORD"] = config.get(
+                        "admin_password", env.get("GATEWAY_ADMIN_PASSWORD")
+                    )
+                    env["IGNITION_EDITION"] = config.get(
+                        "edition", env.get("IGNITION_EDITION", "standard")
+                    )
 
                     # Determine version to decide which modules field to use
                     version = config.get("version", "latest")
                     is_83_or_later = False
                     # "latest" maps to 8.3+, so treat it as 8.3
-                    if version == "latest" or (version.startswith("8.3") or version.startswith("8.4") or version.startswith("9")):
+                    if version == "latest" or (
+                        version.startswith("8.3")
+                        or version.startswith("8.4")
+                        or version.startswith("9")
+                    ):
                         is_83_or_later = True
 
                     # Handle modules - convert array to comma-separated string
@@ -473,12 +521,20 @@ def generate_stack(stack_config: StackConfig):
                     third_party_modules = config.get("third_party_modules", "")
                     if third_party_modules and third_party_modules.strip():
                         # Split by newlines and filter empty lines
-                        module_urls = [url.strip() for url in third_party_modules.split('\n') if url.strip()]
+                        module_urls = [
+                            url.strip()
+                            for url in third_party_modules.split("\n")
+                            if url.strip()
+                        ]
                         if module_urls:
                             env["GATEWAY_MODULE_RELINK"] = ";".join(module_urls)
 
-                    env["IGNITION_MEMORY_MAX"] = config.get("memory_max", env.get("IGNITION_MEMORY_MAX", "2048m"))
-                    env["IGNITION_MEMORY_INIT"] = config.get("memory_init", env.get("IGNITION_MEMORY_INIT", "512m"))
+                    env["IGNITION_MEMORY_MAX"] = config.get(
+                        "memory_max", env.get("IGNITION_MEMORY_MAX", "2048m")
+                    )
+                    env["IGNITION_MEMORY_INIT"] = config.get(
+                        "memory_init", env.get("IGNITION_MEMORY_INIT", "512m")
+                    )
 
                     # Handle commissioning options - only set if explicitly true
                     if config.get("commissioning_allow_non_secure", False):
@@ -488,99 +544,194 @@ def generate_stack(stack_config: StackConfig):
                     # Users should manually commission the gateway after first start
 
                     # Apply email integration if available (for alarm notifications)
-                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                    if has_email_testing and integration_settings.email.get(
+                        "auto_configure_services", True
+                    ):
                         email_int = integration_results["integrations"]["email_testing"]
                         mailhog_instance = email_int.get("provider", "mailhog")
-                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
-                        email_env_vars = generate_email_env_vars("ignition", mailhog_instance, from_address)
+                        from_address = integration_settings.email.get(
+                            "from_address", "noreply@iiot.local"
+                        )
+                        email_env_vars = generate_email_env_vars(
+                            "ignition", mailhog_instance, from_address
+                        )
                         env.update(email_env_vars)
 
                 elif instance.app_id == "keycloak":
-                    env["KEYCLOAK_ADMIN"] = config.get("admin_username", env.get("KEYCLOAK_ADMIN"))
-                    env["KEYCLOAK_ADMIN_PASSWORD"] = config.get("admin_password", env.get("KEYCLOAK_ADMIN_PASSWORD"))
+                    env["KEYCLOAK_ADMIN"] = config.get(
+                        "admin_username", env.get("KEYCLOAK_ADMIN")
+                    )
+                    env["KEYCLOAK_ADMIN_PASSWORD"] = config.get(
+                        "admin_password", env.get("KEYCLOAK_ADMIN_PASSWORD")
+                    )
 
                     # Apply email integration if available (for user emails)
-                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                    if has_email_testing and integration_settings.email.get(
+                        "auto_configure_services", True
+                    ):
                         email_int = integration_results["integrations"]["email_testing"]
                         mailhog_instance = email_int.get("provider", "mailhog")
-                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
-                        email_env_vars = generate_email_env_vars("keycloak", mailhog_instance, from_address)
+                        from_address = integration_settings.email.get(
+                            "from_address", "noreply@iiot.local"
+                        )
+                        email_env_vars = generate_email_env_vars(
+                            "keycloak", mailhog_instance, from_address
+                        )
                         env.update(email_env_vars)
 
                 elif instance.app_id == "grafana":
-                    env["GF_SECURITY_ADMIN_USER"] = config.get("admin_username", env.get("GF_SECURITY_ADMIN_USER"))
-                    env["GF_SECURITY_ADMIN_PASSWORD"] = config.get("admin_password", env.get("GF_SECURITY_ADMIN_PASSWORD"))
+                    env["GF_SECURITY_ADMIN_USER"] = config.get(
+                        "admin_username", env.get("GF_SECURITY_ADMIN_USER")
+                    )
+                    env["GF_SECURITY_ADMIN_PASSWORD"] = config.get(
+                        "admin_password", env.get("GF_SECURITY_ADMIN_PASSWORD")
+                    )
 
                     # Apply OAuth integration if available
-                    if has_oauth_provider and integration_settings.oauth.get("auto_configure_services", True):
-                        oauth_int = integration_results["integrations"]["oauth_provider"]
+                    if has_oauth_provider and integration_settings.oauth.get(
+                        "auto_configure_services", True
+                    ):
+                        oauth_int = integration_results["integrations"][
+                            "oauth_provider"
+                        ]
                         for client in oauth_int.get("clients", []):
-                            if client["service_id"] == "grafana" and client["instance_name"] == instance.instance_name:
+                            if (
+                                client["service_id"] == "grafana"
+                                and client["instance_name"] == instance.instance_name
+                            ):
                                 provider = client["provider"]
-                                realm_name = integration_settings.oauth.get("realm_name", "iiot")
+                                realm_name = integration_settings.oauth.get(
+                                    "realm_name", "iiot"
+                                )
 
                                 # Get client secret from generated Keycloak realm
                                 client_secret = None
                                 if keycloak_clients:
-                                    kc_client = next((kc for kc in keycloak_clients if kc.get("clientId") == "grafana"), None)
+                                    kc_client = next(
+                                        (
+                                            kc
+                                            for kc in keycloak_clients
+                                            if kc.get("clientId") == "grafana"
+                                        ),
+                                        None,
+                                    )
                                     if kc_client:
                                         client_secret = kc_client.get("secret")
 
-                                oauth_env_vars = generate_oauth_env_vars("grafana", provider, realm_name, client_secret=client_secret)
+                                oauth_env_vars = generate_oauth_env_vars(
+                                    "grafana",
+                                    provider,
+                                    realm_name,
+                                    client_secret=client_secret,
+                                )
                                 env.update(oauth_env_vars)
 
                     # Apply email integration if available
-                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                    if has_email_testing and integration_settings.email.get(
+                        "auto_configure_services", True
+                    ):
                         email_int = integration_results["integrations"]["email_testing"]
                         mailhog_instance = email_int.get("provider", "mailhog")
-                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
-                        email_env_vars = generate_email_env_vars("grafana", mailhog_instance, from_address)
+                        from_address = integration_settings.email.get(
+                            "from_address", "noreply@iiot.local"
+                        )
+                        email_env_vars = generate_email_env_vars(
+                            "grafana", mailhog_instance, from_address
+                        )
                         env.update(email_env_vars)
 
                 elif instance.app_id == "n8n":
-                    env["N8N_BASIC_AUTH_USER"] = config.get("username", env.get("N8N_BASIC_AUTH_USER"))
-                    env["N8N_BASIC_AUTH_PASSWORD"] = config.get("password", env.get("N8N_BASIC_AUTH_PASSWORD"))
+                    env["N8N_BASIC_AUTH_USER"] = config.get(
+                        "username", env.get("N8N_BASIC_AUTH_USER")
+                    )
+                    env["N8N_BASIC_AUTH_PASSWORD"] = config.get(
+                        "password", env.get("N8N_BASIC_AUTH_PASSWORD")
+                    )
 
                     # Apply OAuth integration if available
-                    if has_oauth_provider and integration_settings.oauth.get("auto_configure_services", True):
-                        oauth_int = integration_results["integrations"]["oauth_provider"]
+                    if has_oauth_provider and integration_settings.oauth.get(
+                        "auto_configure_services", True
+                    ):
+                        oauth_int = integration_results["integrations"][
+                            "oauth_provider"
+                        ]
                         for client in oauth_int.get("clients", []):
-                            if client["service_id"] == "n8n" and client["instance_name"] == instance.instance_name:
+                            if (
+                                client["service_id"] == "n8n"
+                                and client["instance_name"] == instance.instance_name
+                            ):
                                 provider = client["provider"]
-                                realm_name = integration_settings.oauth.get("realm_name", "iiot")
+                                realm_name = integration_settings.oauth.get(
+                                    "realm_name", "iiot"
+                                )
 
                                 # Get client secret from generated Keycloak realm
                                 client_secret = None
                                 if keycloak_clients:
-                                    kc_client = next((kc for kc in keycloak_clients if kc.get("clientId") == "n8n"), None)
+                                    kc_client = next(
+                                        (
+                                            kc
+                                            for kc in keycloak_clients
+                                            if kc.get("clientId") == "n8n"
+                                        ),
+                                        None,
+                                    )
                                     if kc_client:
                                         client_secret = kc_client.get("secret")
 
-                                oauth_env_vars = generate_oauth_env_vars("n8n", provider, realm_name, client_secret=client_secret)
+                                oauth_env_vars = generate_oauth_env_vars(
+                                    "n8n",
+                                    provider,
+                                    realm_name,
+                                    client_secret=client_secret,
+                                )
                                 env.update(oauth_env_vars)
 
                     # Apply email integration if available
-                    if has_email_testing and integration_settings.email.get("auto_configure_services", True):
+                    if has_email_testing and integration_settings.email.get(
+                        "auto_configure_services", True
+                    ):
                         email_int = integration_results["integrations"]["email_testing"]
                         mailhog_instance = email_int.get("provider", "mailhog")
-                        from_address = integration_settings.email.get("from_address", "noreply@iiot.local")
-                        email_env_vars = generate_email_env_vars("n8n", mailhog_instance, from_address)
+                        from_address = integration_settings.email.get(
+                            "from_address", "noreply@iiot.local"
+                        )
+                        email_env_vars = generate_email_env_vars(
+                            "n8n", mailhog_instance, from_address
+                        )
                         env.update(email_env_vars)
 
                 elif instance.app_id == "rabbitmq":
-                    env["RABBITMQ_DEFAULT_USER"] = config.get("username", env.get("RABBITMQ_DEFAULT_USER"))
-                    env["RABBITMQ_DEFAULT_PASS"] = config.get("password", env.get("RABBITMQ_DEFAULT_PASS"))
+                    env["RABBITMQ_DEFAULT_USER"] = config.get(
+                        "username", env.get("RABBITMQ_DEFAULT_USER")
+                    )
+                    env["RABBITMQ_DEFAULT_PASS"] = config.get(
+                        "password", env.get("RABBITMQ_DEFAULT_PASS")
+                    )
 
                 elif instance.app_id == "vault":
-                    env["VAULT_DEV_ROOT_TOKEN_ID"] = config.get("root_token", env.get("VAULT_DEV_ROOT_TOKEN_ID"))
+                    env["VAULT_DEV_ROOT_TOKEN_ID"] = config.get(
+                        "root_token", env.get("VAULT_DEV_ROOT_TOKEN_ID")
+                    )
 
                 elif instance.app_id == "pgadmin":
-                    env["PGADMIN_DEFAULT_EMAIL"] = config.get("email", env.get("PGADMIN_DEFAULT_EMAIL"))
-                    env["PGADMIN_DEFAULT_PASSWORD"] = config.get("password", env.get("PGADMIN_DEFAULT_PASSWORD"))
+                    env["PGADMIN_DEFAULT_EMAIL"] = config.get(
+                        "email", env.get("PGADMIN_DEFAULT_EMAIL")
+                    )
+                    env["PGADMIN_DEFAULT_PASSWORD"] = config.get(
+                        "password", env.get("PGADMIN_DEFAULT_PASSWORD")
+                    )
 
                 elif instance.app_id == "phpmyadmin":
                     # PMA_HOST should point to the mariadb instance
-                    mariadb_instance = next((inst for inst in stack_config.instances if inst.app_id == "mariadb"), None)
+                    mariadb_instance = next(
+                        (
+                            inst
+                            for inst in stack_config.instances
+                            if inst.app_id == "mariadb"
+                        ),
+                        None,
+                    )
                     if mariadb_instance:
                         env["PMA_HOST"] = mariadb_instance.instance_name
                         env["PMA_PORT"] = str(mariadb_instance.config.get("port", 3306))
@@ -597,7 +748,9 @@ def generate_stack(stack_config: StackConfig):
 
                 # Add Keycloak import volume if realm import is configured
                 if instance.app_id == "keycloak" and keycloak_clients:
-                    volumes.append(f"./configs/{service_name}/import:/opt/keycloak/data/import:ro")
+                    volumes.append(
+                        f"./configs/{service_name}/import:/opt/keycloak/data/import:ro"
+                    )
 
                 service["volumes"] = volumes
 
@@ -631,41 +784,57 @@ def generate_stack(stack_config: StackConfig):
                     "authelia": lambda c: "9091",
                     "mailhog": lambda c: "8025",
                     "influxdb": lambda c: "8086",
-                    "chronograf": lambda c: "8888"
+                    "chronograf": lambda c: "8888",
                 }
 
                 if instance.app_id in web_service_ports:
                     # Create subdomain from service name
-                    subdomain = service_name.split('-')[0] if '-' in service_name else service_name
+                    subdomain = (
+                        service_name.split("-")[0]
+                        if "-" in service_name
+                        else service_name
+                    )
 
                     # Get the port using the port function
                     port = web_service_ports[instance.app_id](config)
 
                     # Get domain from integration settings
-                    base_domain = integration_settings.reverse_proxy.get("base_domain", "localhost")
-                    enable_https = integration_settings.reverse_proxy.get("enable_https", False)
+                    base_domain = integration_settings.reverse_proxy.get(
+                        "base_domain", "localhost"
+                    )
+                    enable_https = integration_settings.reverse_proxy.get(
+                        "enable_https", False
+                    )
                     entrypoint = "websecure" if enable_https else "web"
 
                     service["labels"] = [
                         "traefik.enable=true",
                         f"traefik.http.routers.{service_name}.rule=Host(`{subdomain}.{base_domain}`)",
                         f"traefik.http.routers.{service_name}.entrypoints={entrypoint}",
-                        f"traefik.http.services.{service_name}.loadbalancer.server.port={port}"
+                        f"traefik.http.services.{service_name}.loadbalancer.server.port={port}",
                     ]
 
                     # Add TLS if HTTPS is enabled
                     if enable_https:
-                        service["labels"].append(f"traefik.http.routers.{service_name}.tls=true")
-                        service["labels"].append(f"traefik.http.routers.{service_name}.tls.certresolver=letsencrypt")
+                        service["labels"].append(
+                            f"traefik.http.routers.{service_name}.tls=true"
+                        )
+                        service["labels"].append(
+                            f"traefik.http.routers.{service_name}.tls.certresolver=letsencrypt"
+                        )
 
             compose["services"][service_name] = service
 
             # Add to env file
             env_vars.append(f"# {service_name}")
-            env_vars.append(f"{service_name.upper().replace('-', '_')}_VERSION={version}")
+            env_vars.append(
+                f"{service_name.upper().replace('-', '_')}_VERSION={version}"
+            )
             if "environment" in service:
                 for key, value in service["environment"].items():
-                    env_vars.append(f"{service_name.upper().replace('-', '_')}_{key}={value}")
+                    env_vars.append(
+                        f"{service_name.upper().replace('-', '_')}_{key}={value}"
+                    )
             env_vars.append("")
 
         # Collect named volumes from all services
@@ -678,7 +847,9 @@ def generate_stack(stack_config: StackConfig):
                     if ":" in vol:
                         volume_part = vol.split(":")[0]
                         # Named volumes don't start with ./ or /
-                        if not volume_part.startswith("./") and not volume_part.startswith("/"):
+                        if not volume_part.startswith(
+                            "./"
+                        ) and not volume_part.startswith("/"):
                             named_volumes.add(volume_part)
 
         # Add named volumes to compose structure
@@ -701,22 +872,28 @@ def generate_stack(stack_config: StackConfig):
                     mqtt_enable_tls = integration_settings.mqtt.get("enable_tls", False)
                     mqtt_tls_port = integration_settings.mqtt.get("tls_port", 8883)
 
-                    config_files[f"configs/{instance_name}/mosquitto.conf"] = generate_mosquitto_config(
-                        username=mqtt_username,
-                        password=mqtt_password,
-                        enable_tls=mqtt_enable_tls,
-                        tls_port=mqtt_tls_port
+                    config_files[f"configs/{instance_name}/mosquitto.conf"] = (
+                        generate_mosquitto_config(
+                            username=mqtt_username,
+                            password=mqtt_password,
+                            enable_tls=mqtt_enable_tls,
+                            tls_port=mqtt_tls_port,
+                        )
                     )
 
                     if mqtt_username and mqtt_password:
-                        config_files[f"configs/{instance_name}/passwd"] = generate_mosquitto_password_file(
-                            mqtt_username, mqtt_password
+                        config_files[f"configs/{instance_name}/passwd"] = (
+                            generate_mosquitto_password_file(
+                                mqtt_username, mqtt_password
+                            )
                         )
 
         # Generate Prometheus config files for all Prometheus instances
         for instance in stack_config.instances:
             if instance.app_id == "prometheus":
-                config_files[f"configs/{instance.instance_name}/prometheus.yml"] = generate_prometheus_config()
+                config_files[f"configs/{instance.instance_name}/prometheus.yml"] = (
+                    generate_prometheus_config()
+                )
 
         # 2. Grafana Datasource Provisioning
         if "visualization" in integration_results.get("integrations", {}):
@@ -731,22 +908,27 @@ def generate_stack(stack_config: StackConfig):
                     ds_instance_name = ds["instance_name"]
                     ds_config = ds["config"]
 
-                    datasources_config.append({
-                        "type": ds_type,
-                        "instance_name": ds_instance_name,
-                        "config": ds_config
-                    })
+                    datasources_config.append(
+                        {
+                            "type": ds_type,
+                            "instance_name": ds_instance_name,
+                            "config": ds_config,
+                        }
+                    )
 
                 if datasources_config:
-                    config_files[f"configs/{grafana_instance}/provisioning/datasources/auto.yaml"] = \
-                        generate_grafana_datasources(datasources_config)
+                    config_files[
+                        f"configs/{grafana_instance}/provisioning/datasources/auto.yaml"
+                    ] = generate_grafana_datasources(datasources_config)
 
         # 3. Keycloak Realm Configuration - Save to file
         if keycloak_realm_config:
             # Use the pre-generated realm config (ensures secrets match)
             realm_name = integration_settings.oauth.get("realm_name", "iiot")
             realm_json = json.dumps(keycloak_realm_config, indent=2)
-            config_files[f"configs/keycloak/import/realm-{realm_name}.json"] = realm_json
+            config_files[f"configs/keycloak/import/realm-{realm_name}.json"] = (
+                realm_json
+            )
 
         # Convert to YAML
         compose_yaml = yaml.dump(compose, default_flow_style=False, sort_keys=False)
@@ -755,7 +937,9 @@ def generate_stack(stack_config: StackConfig):
         env_content = "\n".join(env_vars)
 
         # Create README
-        has_ignition_service = any(inst.app_id == "ignition" for inst in stack_config.instances)
+        has_ignition_service = any(
+            inst.app_id == "ignition" for inst in stack_config.instances
+        )
 
         startup_instructions = """4. Start the stack:
    ```bash
@@ -792,7 +976,9 @@ def generate_stack(stack_config: StackConfig):
                         # Extract local path from volume mapping (e.g., "./configs/traefik/traefik.yml:/etc/traefik/traefik.yml")
                         local_path = vol.split(":")[0]
                         # Replace {instance_name} placeholder
-                        local_path = local_path.replace("{instance_name}", instance.instance_name)
+                        local_path = local_path.replace(
+                            "{instance_name}", instance.instance_name
+                        )
 
                         # Only add parent directory of config files, not data directories
                         # For config files, we need to ensure the parent directory exists
@@ -802,7 +988,11 @@ def generate_stack(stack_config: StackConfig):
                                 required_dirs.add(parent_dir)
 
         # Generate directory creation commands
-        dir_creation_cmds = "\n   ".join([f"mkdir -p {d}" for d in sorted(required_dirs)]) if required_dirs else "   # No directories required - using Docker named volumes"
+        dir_creation_cmds = (
+            "\n   ".join([f"mkdir -p {d}" for d in sorted(required_dirs)])
+            if required_dirs
+            else "   # No directories required - using Docker named volumes"
+        )
 
         readme_content = f"""# {global_settings.stack_name} - Generated Configuration
 
@@ -912,8 +1102,12 @@ def generate_stack(stack_config: StackConfig):
                 readme_content += f"- **{instance.instance_name}**: {url}\n"
 
         # Add PostgreSQL connection instructions if applicable
-        postgres_in_stack = any(inst.app_id == "postgres" for inst in stack_config.instances)
-        ignition_in_stack = any(inst.app_id == "ignition" for inst in stack_config.instances)
+        postgres_in_stack = any(
+            inst.app_id == "postgres" for inst in stack_config.instances
+        )
+        ignition_in_stack = any(
+            inst.app_id == "ignition" for inst in stack_config.instances
+        )
 
         if postgres_in_stack and ignition_in_stack:
             for inst in stack_config.instances:
@@ -957,7 +1151,9 @@ To connect Ignition to PostgreSQL:
         # Add Keycloak SSO section if configured
         if keycloak_clients:
             realm_name = integration_settings.oauth.get("realm_name", "iiot")
-            readme_content += generate_keycloak_readme_section(realm_name, keycloak_clients)
+            readme_content += generate_keycloak_readme_section(
+                realm_name, keycloak_clients
+            )
 
         # Add Ignition database auto-registration section if applicable
         ignition_db_list = []
@@ -969,11 +1165,13 @@ To connect Ignition to PostgreSQL:
                 if client["service_id"] == "ignition" and client.get("auto_register"):
                     # Get compatible databases for this Ignition instance
                     for provider in client.get("matched_providers", []):
-                        ignition_db_list.append({
-                            "type": provider["service_id"],
-                            "instance_name": provider["instance_name"],
-                            "config": provider["config"]
-                        })
+                        ignition_db_list.append(
+                            {
+                                "type": provider["service_id"],
+                                "instance_name": provider["instance_name"],
+                                "config": provider["config"],
+                            }
+                        )
 
         if ignition_db_list:
             readme_content += generate_ignition_db_readme_section(ignition_db_list)
@@ -981,8 +1179,7 @@ To connect Ignition to PostgreSQL:
         # Add ntfy monitoring section if enabled
         if global_settings.ntfy_enabled and global_settings.ntfy_topic:
             readme_content += generate_ntfy_readme_section(
-                global_settings.ntfy_server,
-                global_settings.ntfy_topic
+                global_settings.ntfy_server, global_settings.ntfy_topic
             )
 
         readme_content += """
@@ -1007,11 +1204,12 @@ docker compose down -v
             "config_files": config_files,
             "ntfy_enabled": global_settings.ntfy_enabled,
             "ntfy_server": global_settings.ntfy_server,
-            "ntfy_topic": global_settings.ntfy_topic
+            "ntfy_topic": global_settings.ntfy_topic,
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/download")
 def download_stack(stack_config: StackConfig):
@@ -1046,13 +1244,18 @@ def download_stack(stack_config: StackConfig):
                 monitor_script = generate_ntfy_monitor_script(
                     ntfy_server=global_settings.ntfy_server,
                     ntfy_topic=global_settings.ntfy_topic,
-                    stack_name=global_settings.stack_name
+                    stack_name=global_settings.stack_name,
                 )
                 zip_file.writestr("monitor.sh", monitor_script)
 
             # Generate Ignition database auto-registration script if applicable
-            has_ignition = any(inst.app_id == "ignition" for inst in stack_config.instances)
-            has_databases = any(inst.app_id in ["postgres", "mariadb", "mssql"] for inst in stack_config.instances)
+            has_ignition = any(
+                inst.app_id == "ignition" for inst in stack_config.instances
+            )
+            has_databases = any(
+                inst.app_id in ["postgres", "mariadb", "mssql"]
+                for inst in stack_config.instances
+            )
 
             if has_ignition and has_databases:
                 # Detect integrations to find database connections
@@ -1060,7 +1263,7 @@ def download_stack(stack_config: StackConfig):
                     {
                         "app_id": inst.app_id,
                         "instance_name": inst.instance_name,
-                        "config": inst.config
+                        "config": inst.config,
                     }
                     for inst in stack_config.instances
                 ]
@@ -1075,42 +1278,67 @@ def download_stack(stack_config: StackConfig):
                     for client in db_int.get("clients", []):
                         if client["service_id"] == "ignition":
                             for provider in client.get("matched_providers", []):
-                                ignition_dbs.append({
-                                    "type": provider["service_id"],
-                                    "instance_name": provider["instance_name"],
-                                    "config": provider["config"]
-                                })
+                                ignition_dbs.append(
+                                    {
+                                        "type": provider["service_id"],
+                                        "instance_name": provider["instance_name"],
+                                        "config": provider["config"],
+                                    }
+                                )
 
                     if ignition_dbs:
                         # Get Ignition admin credentials
-                        ignition_inst = next((inst for inst in stack_config.instances if inst.app_id == "ignition"), None)
+                        ignition_inst = next(
+                            (
+                                inst
+                                for inst in stack_config.instances
+                                if inst.app_id == "ignition"
+                            ),
+                            None,
+                        )
                         if ignition_inst:
                             ignition_host = ignition_inst.instance_name
                             ignition_port = ignition_inst.config.get("http_port", 8088)
-                            admin_username = ignition_inst.config.get("admin_username", "admin")
-                            admin_password = ignition_inst.config.get("admin_password", "password")
-
-                            # Generate the registration script
-                            db_registration_script = generate_ignition_db_registration_script(
-                                ignition_host=ignition_host,
-                                ignition_port=ignition_port,
-                                admin_username=admin_username,
-                                admin_password=admin_password,
-                                databases=ignition_dbs
+                            admin_username = ignition_inst.config.get(
+                                "admin_username", "admin"
+                            )
+                            admin_password = ignition_inst.config.get(
+                                "admin_password", "password"
                             )
 
-                            zip_file.writestr("scripts/register_databases.py", db_registration_script)
-                            zip_file.writestr("scripts/requirements.txt", generate_requirements_file())
+                            # Generate the registration script
+                            db_registration_script = (
+                                generate_ignition_db_registration_script(
+                                    ignition_host=ignition_host,
+                                    ignition_port=ignition_port,
+                                    admin_username=admin_username,
+                                    admin_password=admin_password,
+                                    databases=ignition_dbs,
+                                )
+                            )
+
+                            zip_file.writestr(
+                                "scripts/register_databases.py", db_registration_script
+                            )
+                            zip_file.writestr(
+                                "scripts/requirements.txt", generate_requirements_file()
+                            )
 
             # Generate Ignition initialization script if Ignition is present
-            has_postgres = any(inst.app_id == "postgres" for inst in stack_config.instances)
+            has_postgres = any(
+                inst.app_id == "postgres" for inst in stack_config.instances
+            )
 
             if has_ignition:
                 # Load catalog for volume path extraction
                 catalog = load_catalog()
-                catalog_dict_download = {app["id"]: app for app in catalog["applications"]}
+                catalog_dict_download = {
+                    app["id"]: app for app in catalog["applications"]
+                }
 
-                ignition_instances = [inst for inst in stack_config.instances if inst.app_id == "ignition"]
+                ignition_instances = [
+                    inst for inst in stack_config.instances if inst.app_id == "ignition"
+                ]
 
                 # Get Ignition and PostgreSQL configs for database auto-configuration
                 ignition_config = None
@@ -1143,7 +1371,9 @@ echo "📁 Creating config directories..."
                         for vol in app["default_config"]["volumes"]:
                             if ":" in vol and vol.startswith("./"):
                                 local_path = vol.split(":")[0]
-                                local_path = local_path.replace("{instance_name}", instance.instance_name)
+                                local_path = local_path.replace(
+                                    "{instance_name}", instance.instance_name
+                                )
                                 # Only add parent directory of config files
                                 if "/" in local_path:
                                     parent_dir = "/".join(local_path.split("/")[:-1])
@@ -1265,7 +1495,11 @@ echo "📋 Service URLs:"
                     if instance.app_id == "ignition":
                         http_port = instance.config.get("http_port", 8088)
                         if has_traefik:
-                            subdomain = instance.instance_name.split('-')[0] if '-' in instance.instance_name else instance.instance_name
+                            subdomain = (
+                                instance.instance_name.split("-")[0]
+                                if "-" in instance.instance_name
+                                else instance.instance_name
+                            )
                             init_script += f"""echo "   🔧 {instance.instance_name}: http://{subdomain}.localhost (via Traefik) or http://localhost:{http_port}"
 """
                         else:
@@ -1310,7 +1544,11 @@ echo Service URLs:
                     if instance.app_id == "ignition":
                         http_port = instance.config.get("http_port", 8088)
                         if has_traefik:
-                            subdomain = instance.instance_name.split('-')[0] if '-' in instance.instance_name else instance.instance_name
+                            subdomain = (
+                                instance.instance_name.split("-")[0]
+                                if "-" in instance.instance_name
+                                else instance.instance_name
+                            )
                             win_script += f"""echo    {instance.instance_name}: http://{subdomain}.localhost or http://localhost:{http_port}
 """
                         else:
@@ -1334,14 +1572,19 @@ pause
             # Generate Traefik configuration files if Traefik is present
             if has_traefik:
                 # Get integration settings for Traefik
-                integration_settings = stack_config.integration_settings or IntegrationSettings()
-                enable_https = integration_settings.reverse_proxy.get("enable_https", False)
-                letsencrypt_email = integration_settings.reverse_proxy.get("letsencrypt_email", "")
+                integration_settings = (
+                    stack_config.integration_settings or IntegrationSettings()
+                )
+                enable_https = integration_settings.reverse_proxy.get(
+                    "enable_https", False
+                )
+                letsencrypt_email = integration_settings.reverse_proxy.get(
+                    "letsencrypt_email", ""
+                )
 
                 # Main Traefik configuration using config generator
                 traefik_config = generate_traefik_static_config(
-                    enable_https=enable_https,
-                    letsencrypt_email=letsencrypt_email
+                    enable_https=enable_https, letsencrypt_email=letsencrypt_email
                 )
                 zip_file.writestr("configs/traefik/traefik.yml", traefik_config)
 
@@ -1360,36 +1603,49 @@ pause
                     "authelia": lambda c: "9091",
                     "mailhog": lambda c: "8025",
                     "influxdb": lambda c: "8086",
-                    "chronograf": lambda c: "8888"
+                    "chronograf": lambda c: "8888",
                 }
 
                 # Generate dynamic routing for each web service
                 services_for_traefik = []
                 for instance in stack_config.instances:
-                    if instance.app_id != "traefik" and instance.app_id in web_service_ports:
+                    if (
+                        instance.app_id != "traefik"
+                        and instance.app_id in web_service_ports
+                    ):
                         service_name = instance.instance_name
                         config = instance.config
 
                         # Create subdomain from service name
-                        subdomain = service_name.split('-')[0] if '-' in service_name else service_name
+                        subdomain = (
+                            service_name.split("-")[0]
+                            if "-" in service_name
+                            else service_name
+                        )
 
                         # Get the port using the port function
                         port = int(web_service_ports[instance.app_id](config))
 
-                        services_for_traefik.append({
-                            "instance_name": service_name,
-                            "subdomain": subdomain,
-                            "port": port
-                        })
+                        services_for_traefik.append(
+                            {
+                                "instance_name": service_name,
+                                "subdomain": subdomain,
+                                "port": port,
+                            }
+                        )
 
                 # Generate dynamic config using config generator
-                base_domain = integration_settings.reverse_proxy.get("base_domain", "localhost")
+                base_domain = integration_settings.reverse_proxy.get(
+                    "base_domain", "localhost"
+                )
                 dynamic_config = generate_traefik_dynamic_config(
                     services=services_for_traefik,
                     domain=base_domain,
-                    enable_https=enable_https
+                    enable_https=enable_https,
                 )
-                zip_file.writestr("configs/traefik/dynamic/services.yml", dynamic_config)
+                zip_file.writestr(
+                    "configs/traefik/dynamic/services.yml", dynamic_config
+                )
 
             # Add uploaded module files for Ignition instances
             for instance in stack_config.instances:
@@ -1403,20 +1659,28 @@ pause
                             if encoded_content:
                                 try:
                                     content = base64.b64decode(encoded_content)
-                                    zip_file.writestr(f"modules/{instance.instance_name}/{filename}", content)
+                                    zip_file.writestr(
+                                        f"modules/{instance.instance_name}/{filename}",
+                                        content,
+                                    )
                                 except Exception as e:
-                                    logger.error(f"Error decoding module {filename}: {e}")
+                                    logger.error(
+                                        f"Error decoding module {filename}: {e}"
+                                    )
 
         zip_buffer.seek(0)
 
         return StreamingResponse(
             zip_buffer,
             media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{global_settings.stack_name}.zip"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{global_settings.stack_name}.zip"'
+            },
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/download/docker-installer/linux")
 def download_linux_installer():
@@ -1427,13 +1691,16 @@ def download_linux_installer():
             script_content = f.read()
 
         return StreamingResponse(
-            io.BytesIO(script_content.encode('utf-8')),
+            io.BytesIO(script_content.encode("utf-8")),
             media_type="text/x-shellscript",
-            headers={"Content-Disposition": "attachment; filename=install-docker-linux.sh"}
+            headers={
+                "Content-Disposition": "attachment; filename=install-docker-linux.sh"
+            },
         )
     except Exception as e:
         logger.error(f"Error downloading Linux installer: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/download/docker-installer/windows")
 def download_windows_installer():
@@ -1444,13 +1711,16 @@ def download_windows_installer():
             script_content = f.read()
 
         return StreamingResponse(
-            io.BytesIO(script_content.encode('utf-8')),
+            io.BytesIO(script_content.encode("utf-8")),
             media_type="application/octet-stream",
-            headers={"Content-Disposition": "attachment; filename=install-docker-windows.ps1"}
+            headers={
+                "Content-Disposition": "attachment; filename=install-docker-windows.ps1"
+            },
         )
     except Exception as e:
         logger.error(f"Error downloading Windows installer: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/generate-offline-bundle")
 def generate_offline_bundle(stack_config: StackConfig):
@@ -1472,7 +1742,9 @@ def generate_offline_bundle(stack_config: StackConfig):
             if not app or not app.get("enabled", False):
                 continue
 
-            version = instance.config.get("version", app.get("default_version", "latest"))
+            version = instance.config.get(
+                "version", app.get("default_version", "latest")
+            )
             image = f"{app['image']}:{version}"
             images_to_pull.append(image)
 
@@ -1701,13 +1973,17 @@ Ensure you have sufficient space and transfer capacity.
         return StreamingResponse(
             zip_buffer,
             media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{global_settings.stack_name}-offline-bundle.zip"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{global_settings.stack_name}-offline-bundle.zip"'
+            },
         )
 
     except Exception as e:
         logger.error(f"Error generating offline bundle: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

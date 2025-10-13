@@ -2,10 +2,11 @@
 Keycloak realm configuration generator
 Generates realm-import.json for automatic OAuth/SSO setup
 """
-import json
-from typing import List, Dict, Any, Optional
-import secrets
+
 import hashlib
+import json
+import secrets
+from typing import Any, Dict, List, Optional
 
 
 def generate_client_secret(service_name: str) -> str:
@@ -18,7 +19,7 @@ def generate_keycloak_realm(
     services: List[str] = None,
     users: List[Dict[str, Any]] = None,
     base_domain: str = "localhost",
-    enable_https: bool = False
+    enable_https: bool = False,
 ) -> Dict[str, Any]:
     """
     Generate a complete Keycloak realm configuration
@@ -43,7 +44,7 @@ def generate_keycloak_realm(
         "id": realm_name,
         "realm": realm_name,
         "displayName": "IIoT Stack",
-        "displayNameHtml": "<div class=\"kc-logo-text\"><span>IIoT Stack</span></div>",
+        "displayNameHtml": '<div class="kc-logo-text"><span>IIoT Stack</span></div>',
         "enabled": True,
         "sslRequired": "external",
         "registrationAllowed": False,
@@ -52,40 +53,36 @@ def generate_keycloak_realm(
         "resetPasswordAllowed": True,
         "editUsernameAllowed": False,
         "bruteForceProtected": True,
-
         # Session settings
         "ssoSessionIdleTimeout": 1800,
         "ssoSessionMaxLifespan": 36000,
         "offlineSessionIdleTimeout": 2592000,
-
         # Token settings
         "accessTokenLifespan": 300,
         "accessTokenLifespanForImplicitFlow": 900,
         "accessCodeLifespan": 60,
         "accessCodeLifespanUserAction": 300,
-
         # Roles
         "roles": {
             "realm": [
                 {
                     "name": "admin",
                     "description": "Administrator role with full access",
-                    "composite": False
+                    "composite": False,
                 },
                 {
                     "name": "user",
                     "description": "Standard user role",
-                    "composite": False
+                    "composite": False,
                 },
                 {
                     "name": "viewer",
                     "description": "Read-only access",
-                    "composite": False
-                }
+                    "composite": False,
+                },
             ],
-            "client": {}
+            "client": {},
         },
-
         # Client scopes
         "clientScopes": [
             {
@@ -94,7 +91,7 @@ def generate_keycloak_realm(
                 "protocol": "openid-connect",
                 "attributes": {
                     "include.in.token.scope": "true",
-                    "display.on.consent.screen": "true"
+                    "display.on.consent.screen": "true",
                 },
                 "protocolMappers": [
                     {
@@ -107,10 +104,10 @@ def generate_keycloak_realm(
                             "id.token.claim": "true",
                             "access.token.claim": "true",
                             "claim.name": "roles",
-                            "jsonType.label": "String"
-                        }
+                            "jsonType.label": "String",
+                        },
                     }
-                ]
+                ],
             },
             {
                 "name": "email",
@@ -118,7 +115,7 @@ def generate_keycloak_realm(
                 "protocol": "openid-connect",
                 "attributes": {
                     "include.in.token.scope": "true",
-                    "display.on.consent.screen": "true"
+                    "display.on.consent.screen": "true",
                 },
                 "protocolMappers": [
                     {
@@ -131,10 +128,10 @@ def generate_keycloak_realm(
                             "id.token.claim": "true",
                             "access.token.claim": "true",
                             "claim.name": "email",
-                            "jsonType.label": "String"
-                        }
+                            "jsonType.label": "String",
+                        },
                     }
-                ]
+                ],
             },
             {
                 "name": "profile",
@@ -142,7 +139,7 @@ def generate_keycloak_realm(
                 "protocol": "openid-connect",
                 "attributes": {
                     "include.in.token.scope": "true",
-                    "display.on.consent.screen": "true"
+                    "display.on.consent.screen": "true",
                 },
                 "protocolMappers": [
                     {
@@ -155,8 +152,8 @@ def generate_keycloak_realm(
                             "id.token.claim": "true",
                             "access.token.claim": "true",
                             "claim.name": "given_name",
-                            "jsonType.label": "String"
-                        }
+                            "jsonType.label": "String",
+                        },
                     },
                     {
                         "name": "family name",
@@ -168,18 +165,16 @@ def generate_keycloak_realm(
                             "id.token.claim": "true",
                             "access.token.claim": "true",
                             "claim.name": "family_name",
-                            "jsonType.label": "String"
-                        }
-                    }
-                ]
-            }
+                            "jsonType.label": "String",
+                        },
+                    },
+                ],
+            },
         ],
-
         # Users
         "users": [],
-
         # Clients
-        "clients": []
+        "clients": [],
     }
 
     # Add users
@@ -231,15 +226,19 @@ def _generate_user(user_data: Dict[str, Any], realm_name: str) -> Dict[str, Any]
             {
                 "type": "password",
                 "value": password,
-                "temporary": user_data.get("temporary", True)
+                "temporary": user_data.get("temporary", True),
             }
         ],
         "realmRoles": roles,
-        "requiredActions": ["UPDATE_PASSWORD"] if user_data.get("temporary", True) else []
+        "requiredActions": (
+            ["UPDATE_PASSWORD"] if user_data.get("temporary", True) else []
+        ),
     }
 
 
-def _generate_grafana_client(realm_name: str, base_domain: str, protocol: str) -> Dict[str, Any]:
+def _generate_grafana_client(
+    realm_name: str, base_domain: str, protocol: str
+) -> Dict[str, Any]:
     """Generate Grafana OAuth client configuration"""
 
     client_secret = generate_client_secret("grafana")
@@ -254,7 +253,7 @@ def _generate_grafana_client(realm_name: str, base_domain: str, protocol: str) -
         "secret": client_secret,
         "redirectUris": [
             redirect_uri,
-            f"{protocol}://grafana.{base_domain}/login/generic_oauth"
+            f"{protocol}://grafana.{base_domain}/login/generic_oauth",
         ],
         "webOrigins": ["+"],
         "protocol": "openid-connect",
@@ -280,7 +279,7 @@ def _generate_grafana_client(realm_name: str, base_domain: str, protocol: str) -
             "tls.client.certificate.bound.access.tokens": "false",
             "saml.authnstatement": "false",
             "display.on.consent.screen": "false",
-            "saml.onetimeuse.condition": "false"
+            "saml.onetimeuse.condition": "false",
         },
         "protocolMappers": [
             {
@@ -293,14 +292,16 @@ def _generate_grafana_client(realm_name: str, base_domain: str, protocol: str) -
                     "multivalued": "true",
                     "userinfo.token.claim": "true",
                     "id.token.claim": "true",
-                    "access.token.claim": "true"
-                }
+                    "access.token.claim": "true",
+                },
             }
-        ]
+        ],
     }
 
 
-def _generate_n8n_client(realm_name: str, base_domain: str, protocol: str) -> Dict[str, Any]:
+def _generate_n8n_client(
+    realm_name: str, base_domain: str, protocol: str
+) -> Dict[str, Any]:
     """Generate n8n OAuth client configuration"""
 
     client_secret = generate_client_secret("n8n")
@@ -313,7 +314,7 @@ def _generate_n8n_client(realm_name: str, base_domain: str, protocol: str) -> Di
         "secret": client_secret,
         "redirectUris": [
             f"{protocol}://n8n.{base_domain}/*",
-            f"{protocol}://n8n.{base_domain}/rest/oauth2-credential/callback"
+            f"{protocol}://n8n.{base_domain}/rest/oauth2-credential/callback",
         ],
         "webOrigins": ["+"],
         "protocol": "openid-connect",
@@ -321,11 +322,13 @@ def _generate_n8n_client(realm_name: str, base_domain: str, protocol: str) -> Di
         "directAccessGrantsEnabled": True,
         "standardFlowEnabled": True,
         "fullScopeAllowed": True,
-        "defaultClientScopes": ["email", "profile", "roles"]
+        "defaultClientScopes": ["email", "profile", "roles"],
     }
 
 
-def _generate_portainer_client(realm_name: str, base_domain: str, protocol: str) -> Dict[str, Any]:
+def _generate_portainer_client(
+    realm_name: str, base_domain: str, protocol: str
+) -> Dict[str, Any]:
     """Generate Portainer OAuth client configuration"""
 
     client_secret = generate_client_secret("portainer")
@@ -336,20 +339,20 @@ def _generate_portainer_client(realm_name: str, base_domain: str, protocol: str)
         "enabled": True,
         "clientAuthenticatorType": "client-secret",
         "secret": client_secret,
-        "redirectUris": [
-            f"{protocol}://portainer.{base_domain}/*"
-        ],
+        "redirectUris": [f"{protocol}://portainer.{base_domain}/*"],
         "webOrigins": ["+"],
         "protocol": "openid-connect",
         "publicClient": False,
         "directAccessGrantsEnabled": True,
         "standardFlowEnabled": True,
         "fullScopeAllowed": True,
-        "defaultClientScopes": ["email", "profile", "roles"]
+        "defaultClientScopes": ["email", "profile", "roles"],
     }
 
 
-def _generate_ignition_client(realm_name: str, base_domain: str, protocol: str) -> Dict[str, Any]:
+def _generate_ignition_client(
+    realm_name: str, base_domain: str, protocol: str
+) -> Dict[str, Any]:
     """Generate Ignition OAuth client configuration (for future IdP module support)"""
 
     client_secret = generate_client_secret("ignition")
@@ -362,7 +365,7 @@ def _generate_ignition_client(realm_name: str, base_domain: str, protocol: str) 
         "secret": client_secret,
         "redirectUris": [
             f"{protocol}://ignition.{base_domain}/*",
-            f"{protocol}://ignition.{base_domain}/data/perspective/client/*"
+            f"{protocol}://ignition.{base_domain}/data/perspective/client/*",
         ],
         "webOrigins": ["+"],
         "protocol": "openid-connect",
@@ -370,11 +373,13 @@ def _generate_ignition_client(realm_name: str, base_domain: str, protocol: str) 
         "directAccessGrantsEnabled": True,
         "standardFlowEnabled": True,
         "fullScopeAllowed": True,
-        "defaultClientScopes": ["email", "profile", "roles"]
+        "defaultClientScopes": ["email", "profile", "roles"],
     }
 
 
-def generate_keycloak_readme_section(realm_name: str, clients: List[Dict[str, Any]]) -> str:
+def generate_keycloak_readme_section(
+    realm_name: str, clients: List[Dict[str, Any]]
+) -> str:
     """Generate README section with Keycloak setup instructions and client secrets"""
 
     content = f"""

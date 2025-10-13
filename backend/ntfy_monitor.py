@@ -3,7 +3,9 @@ Ntfy monitoring script generator for Docker stack monitoring
 """
 
 
-def generate_ntfy_monitor_script(ntfy_server: str, ntfy_topic: str, stack_name: str = "iiot-stack") -> str:
+def generate_ntfy_monitor_script(
+    ntfy_server: str, ntfy_topic: str, stack_name: str = "iiot-stack"
+) -> str:
     """
     Generate a bash script that monitors Docker stack and sends updates via ntfy
 
