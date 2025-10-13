@@ -4,11 +4,12 @@ Comprehensive Authentication API Test Script
 Tests all authentication endpoints systematically
 """
 
-import requests
 import json
 import sys
 import time
 from datetime import datetime
+
+import requests
 
 API_URL = "http://localhost:8000/api"
 TEST_EMAIL = f"test_{int(time.time())}@example.com"
@@ -16,26 +17,31 @@ TEST_PASSWORD = "TestPass123!@#"
 TEST_NAME = "Test User"
 
 # ANSI color codes
-GREEN = '\033[0;32m'
-RED = '\033[0;31m'
-YELLOW = '\033[1;33m'
-BLUE = '\033[0;34m'
-NC = '\033[0m'  # No Color
+GREEN = "\033[0;32m"
+RED = "\033[0;31m"
+YELLOW = "\033[1;33m"
+BLUE = "\033[0;34m"
+NC = "\033[0m"  # No Color
 
 tests_passed = 0
 tests_failed = 0
+
 
 def print_header(text):
     print(f"\n{BLUE}{'=' * 60}{NC}")
     print(f"{BLUE}{text}{NC}")
     print(f"{BLUE}{'=' * 60}{NC}\n")
 
+
 def print_section(text):
     print(f"\n{BLUE}{'━' * 60}{NC}")
     print(f"{BLUE}{text}{NC}")
     print(f"{BLUE}{'━' * 60}{NC}\n")
 
-def test_endpoint(test_name, method, endpoint, data=None, headers=None, expected_status=200):
+
+def test_endpoint(
+    test_name, method, endpoint, data=None, headers=None, expected_status=200
+):
     """Test an API endpoint"""
     global tests_passed, tests_failed
 
@@ -66,7 +72,9 @@ def test_endpoint(test_name, method, endpoint, data=None, headers=None, expected
 
             return response
         else:
-            print(f"{RED}✗ FAILED{NC} (Expected HTTP {expected_status}, got {response.status_code})")
+            print(
+                f"{RED}✗ FAILED{NC} (Expected HTTP {expected_status}, got {response.status_code})"
+            )
             print(f"Response: {response.text[:200]}")
             tests_failed += 1
             return None
@@ -75,6 +83,7 @@ def test_endpoint(test_name, method, endpoint, data=None, headers=None, expected
         print(f"{RED}✗ ERROR:{NC} {str(e)}")
         tests_failed += 1
         return None
+
 
 def main():
     global tests_passed, tests_failed
@@ -88,12 +97,8 @@ def main():
         "Register new user",
         "POST",
         "/auth/register",
-        data={
-            "email": TEST_EMAIL,
-            "password": TEST_PASSWORD,
-            "full_name": TEST_NAME
-        },
-        expected_status=201
+        data={"email": TEST_EMAIL, "password": TEST_PASSWORD, "full_name": TEST_NAME},
+        expected_status=201,
     )
 
     if not register_response:
@@ -107,11 +112,8 @@ def main():
         "Login with correct credentials",
         "POST",
         "/auth/login",
-        data={
-            "email": TEST_EMAIL,
-            "password": TEST_PASSWORD
-        },
-        expected_status=200
+        data={"email": TEST_EMAIL, "password": TEST_PASSWORD},
+        expected_status=200,
     )
 
     if not login_response:
@@ -133,11 +135,8 @@ def main():
         "Login with wrong password (should fail)",
         "POST",
         "/auth/login",
-        data={
-            "email": TEST_EMAIL,
-            "password": "WrongPassword123!"
-        },
-        expected_status=401
+        data={"email": TEST_EMAIL, "password": "WrongPassword123!"},
+        expected_status=401,
     )
 
     # Test 4: Get current user
@@ -146,35 +145,23 @@ def main():
     headers = {"Authorization": f"Bearer {access_token}"}
 
     test_endpoint(
-        "Get current user info",
-        "GET",
-        "/auth/me",
-        headers=headers,
-        expected_status=200
+        "Get current user info", "GET", "/auth/me", headers=headers, expected_status=200
     )
 
     # Test 5: Settings Management
     print_section("4. Settings Management")
 
     test_endpoint(
-        "Get user settings",
-        "GET",
-        "/settings",
-        headers=headers,
-        expected_status=200
+        "Get user settings", "GET", "/settings", headers=headers, expected_status=200
     )
 
     test_endpoint(
         "Update user settings",
         "PUT",
         "/settings",
-        data={
-            "theme": "light",
-            "timezone": "UTC",
-            "notifications_enabled": True
-        },
+        data={"theme": "light", "timezone": "UTC", "notifications_enabled": True},
         headers=headers,
-        expected_status=200
+        expected_status=200,
     )
 
     # Test 6: Stack Management
@@ -188,10 +175,10 @@ def main():
             "stack_name": "Test Stack",
             "description": "A test stack",
             "config_json": {"services": ["ignition"]},
-            "is_public": False
+            "is_public": False,
         },
         headers=headers,
-        expected_status=201
+        expected_status=201,
     )
 
     stack_id = None
@@ -200,11 +187,7 @@ def main():
         stack_id = stack_data.get("id")
 
     test_endpoint(
-        "List user stacks",
-        "GET",
-        "/stacks",
-        headers=headers,
-        expected_status=200
+        "List user stacks", "GET", "/stacks", headers=headers, expected_status=200
     )
 
     if stack_id:
@@ -213,7 +196,7 @@ def main():
             "GET",
             f"/stacks/{stack_id}",
             headers=headers,
-            expected_status=200
+            expected_status=200,
         )
 
         test_endpoint(
@@ -222,10 +205,10 @@ def main():
             f"/stacks/{stack_id}",
             data={
                 "stack_name": "Updated Test Stack",
-                "description": "An updated test stack"
+                "description": "An updated test stack",
             },
             headers=headers,
-            expected_status=200
+            expected_status=200,
         )
 
         test_endpoint(
@@ -233,7 +216,7 @@ def main():
             "DELETE",
             f"/stacks/{stack_id}",
             headers=headers,
-            expected_status=204
+            expected_status=204,
         )
 
     # Test 7: Token Refresh
@@ -244,18 +227,14 @@ def main():
         "POST",
         "/auth/refresh",
         data={"refresh_token": refresh_token},
-        expected_status=200
+        expected_status=200,
     )
 
     # Test 8: Logout
     print_section("7. Logout")
 
     test_endpoint(
-        "Logout user",
-        "POST",
-        "/auth/logout",
-        headers=headers,
-        expected_status=200
+        "Logout user", "POST", "/auth/logout", headers=headers, expected_status=200
     )
 
     # Test 9: Authorization Tests
@@ -265,7 +244,7 @@ def main():
         "Access protected endpoint without token (should fail)",
         "GET",
         "/auth/me",
-        expected_status=403
+        expected_status=403,
     )
 
     test_endpoint(
@@ -273,7 +252,7 @@ def main():
         "GET",
         "/auth/me",
         headers={"Authorization": "Bearer invalid_token_12345"},
-        expected_status=401
+        expected_status=401,
     )
 
     # Test Summary
@@ -288,6 +267,7 @@ def main():
     else:
         print(f"{RED}✗ Some tests failed{NC}")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
