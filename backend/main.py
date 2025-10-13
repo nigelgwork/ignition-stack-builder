@@ -33,11 +33,17 @@ from ignition_db_registration import (
     generate_requirements_file
 )
 
+# Import authentication and user management routers
+import auth_router
+import stacks_router
+import settings_router
+from database import check_db_connection
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="IIoT Stack Builder API")
+app = FastAPI(title="IIoT Stack Builder API", version="2.0.0")
 
 # Enable CORS for frontend
 app.add_middleware(
@@ -47,6 +53,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include authentication and user management routers
+app.include_router(auth_router.router, prefix="/api")
+app.include_router(stacks_router.router, prefix="/api")
+app.include_router(settings_router.router, prefix="/api")
+
+# Database connection check on startup
+@app.on_event("startup")
+async def startup_event():
+    """Check database connection on startup"""
+    logger.info("Starting IIoT Stack Builder API...")
+    if check_db_connection():
+        logger.info("✓ Database connection established")
+    else:
+        logger.warning("⚠ Database connection failed - auth features may not work")
 
 def load_catalog():
     """Load the application catalog from catalog.json"""
@@ -105,7 +126,7 @@ class StackConfig(BaseModel):
 def read_root():
     return {"message": "IIoT Stack Builder API", "version": "1.0.0"}
 
-@app.get("/catalog")
+@app.get("/api/catalog")
 def get_catalog():
     """Get the application catalog"""
     return load_catalog()

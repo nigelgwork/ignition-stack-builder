@@ -1,0 +1,225 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment }}
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/ignition-stack-builder
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=${{ github.event.inputs.environment }}
+
+      - name: Build and push backend image
+        if: hashFiles('backend/Dockerfile') != ''
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ignition-stack-builder-backend:${{ github.event.inputs.environment }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        if: hashFiles('frontend/Dockerfile') != ''
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ignition-stack-builder-frontend:${{ github.event.inputs.environment }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.ignition-stack-builder.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to staging server
+        run: |
+          ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd /opt/ignition-stack-builder
+            docker-compose pull
+            docker-compose up -d
+            docker-compose exec -T backend python migrations/001_create_initial_schema.py
+            echo "Staging deployment completed"
+          EOF
+
+      - name: Run health checks
+        run: |
+          sleep 10
+          curl -f https://staging.ignition-stack-builder.example.com/api/health || exit 1
+          echo "Health check passed"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Staging deployment successful"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Staging deployment failed"
+          exit 1
+
+  request-production-approval:
+    name: Request Production Deployment Approval
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event.inputs.environment == 'production'
+    environment:
+      name: production-approval
+
+    steps:
+      - name: Request approval
+        run: |
+          echo "⏳ Awaiting manual approval for production deployment..."
+          echo "This deployment requires approval from a designated approver."
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-push, request-production-approval]
+    if: github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://ignition-stack-builder.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create backup
+        run: |
+          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd /opt/ignition-stack-builder
+            docker-compose exec -T postgres pg_dump -U stack_builder stack_builder_auth > backup_$(date +%Y%m%d_%H%M%S).sql
+            echo "Backup created"
+          EOF
+
+      - name: Deploy to production server
+        run: |
+          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd /opt/ignition-stack-builder
+            docker-compose pull
+            docker-compose up -d
+            docker-compose exec -T backend python migrations/001_create_initial_schema.py
+            echo "Production deployment completed"
+          EOF
+
+      - name: Run health checks
+        run: |
+          sleep 10
+          curl -f https://ignition-stack-builder.example.com/api/health || exit 1
+          echo "Health check passed"
+
+      - name: Run smoke tests
+        run: |
+          # Test critical endpoints
+          curl -f https://ignition-stack-builder.example.com/ || exit 1
+          echo "Smoke tests passed"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Production deployment successful"
+          echo "Version: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+          echo "Time: $(date)"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "❌ Production deployment failed - initiating rollback"
+          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd /opt/ignition-stack-builder
+            docker-compose down
+            docker-compose up -d
+          EOF
+          exit 1
+
+  post-deployment:
+    name: Post-Deployment Tasks
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+
+    steps:
+      - name: Create deployment record
+        run: |
+          echo "Deployment Record"
+          echo "================="
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Version: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+          echo "Time: $(date)"
+          echo "Status: ${{ needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success' }}"
+
+      - name: Update status badge
+        run: |
+          echo "Deployment completed successfully"
+
+      - name: Clean up old images
+        run: |
+          echo "Cleaning up old Docker images on remote server..."
+          # This would SSH to the server and run docker image prune

@@ -20,6 +20,7 @@ This project aims to reduce setup friction and provide **reproducible, collabora
 
 ## ✨ Features
 - 🔧 **Modern Dark Mode UI** – beautiful web interface with dark mode by default and light/dark toggle.
+- 🔐 **Secure Authentication** – user registration/login with JWT tokens, optional MFA (2FA), and HTTPS encryption.
 - ➕ **Multi-instance Support** – add multiple instances of Ignition, databases, and other services.
 - 🎨 **Categorized Application Catalog** – organized by Industrial Platforms, Databases, Messaging, Monitoring, Authentication, DevOps, Version Control, and more.
 - 🔢 **Version Selection** – choose specific container versions for each service (defaults to latest).
@@ -30,28 +31,38 @@ This project aims to reduce setup friction and provide **reproducible, collabora
 - 🐳 **Docker Installers** – download ready-to-run Docker installation scripts for Linux and Windows.
 - 🔌 **Offline Bundle** – generate airgapped installation bundles with all Docker images for offline deployments.
 - 🔒 **Security Ready** – optional integration with Keycloak, Authentik, Authelia, and Vault.
-- 🌍 **Networking Ready** – Traefik reverse proxy for routing and HTTPS.  
+- 🌍 **Networking Ready** – Traefik reverse proxy for routing and HTTPS.
+- 🛡️ **HTTPS by Default** – self-signed SSL certificates for secure local development.  
 
 ---
 
 ## 🏛️ Architecture
-The system is divided into three main components:
+The system is divided into four main components:
 
-1. **Frontend (React + Vite)**
+1. **Frontend (React + Vite + Nginx)**
    - Modern React application with responsive dark/light theme.
+   - User authentication with registration, login, and optional MFA.
    - Categorized application selection with inline configuration.
    - Service overview with color-coded cards showing access URLs.
    - Real-time docker-compose.yml preview.
-   - Runs on port 3500.
+   - Nginx web server with HTTPS support (self-signed SSL certificates).
+   - Runs on port 3500 (HTTP) and 3443 (HTTPS).
 
 2. **Backend (FastAPI)**
-   - Python FastAPI REST API.
+   - Python FastAPI REST API with JWT authentication.
    - Application catalog stored in JSON with version management.
+   - User management with secure password hashing.
    - Dynamic Docker Compose and .env file generation.
    - ZIP download endpoint for complete stack packages.
    - Runs on port 8000.
 
-3. **Generated Stack Output**
+3. **Authentication Database (PostgreSQL + Redis)**
+   - PostgreSQL 16 for user accounts and settings storage.
+   - Redis 7 for session/token caching.
+   - Automatically initialized with database schema.
+   - PostgreSQL runs on port 5433, Redis on port 6379.
+
+4. **Generated Stack Output**
    - `docker-compose.yml` – complete service definitions with configured ports, volumes, and environment variables.
    - `.env` file – global settings, service versions, and environment variables.
    - `README.md` – documentation with service URLs, getting started instructions, and configuration details.  
@@ -157,7 +168,7 @@ The `.env` file contains:
 
 ### Prerequisites
 - Docker and Docker Compose installed
-- Ports 3500 (frontend) and 8000 (backend) available
+- Ports 3500 (HTTP), 3443 (HTTPS), 8000 (backend), 5433 (PostgreSQL), 6379 (Redis) available
 
 ### Running the Stack Builder
 
@@ -167,13 +178,25 @@ The `.env` file contains:
    cd ignition-stack-builder
    ```
 
-2. **Start the Stack Builder web app**
+2. **Generate SSL certificates for HTTPS**
+   ```bash
+   ./generate-ssl-certs.sh
+   ```
+   This creates self-signed certificates for secure local development. Your browser will show a security warning (click "Advanced" → "Proceed to localhost").
+
+3. **Start the Stack Builder web app**
    ```bash
    docker-compose up -d
    ```
 
-3. **Access the web interface**
-   Open your browser and navigate to:
+4. **Access the web interface**
+
+   **HTTPS (Recommended):**
+   ```
+   https://localhost:3443
+   ```
+
+   **HTTP (auto-redirects to HTTPS):**
    ```
    http://localhost:3500
    ```
@@ -183,7 +206,12 @@ The `.env` file contains:
    http://localhost:8000
    ```
 
-4. **Build your IIoT stack**
+5. **Create your account**
+   - Click "Sign up" to create a new account
+   - Enter your email and password (passwords must have 8+ characters, uppercase, lowercase, digit, and special character)
+   - Login with your credentials
+
+6. **Build your IIoT stack**
    - Toggle dark/light mode with the switch in the header
    - Set global settings (timezone defaults to Australia/Adelaide, restart policy)
    - Select applications from categorized sections

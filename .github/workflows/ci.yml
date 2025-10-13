@@ -1,0 +1,284 @@
+name: CI - Tests and Security Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend-tests:
+    name: Backend API Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: stack_builder_auth
+          POSTGRES_USER: stack_builder
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 bandit safety
+
+      - name: Create test environment file
+        run: |
+          cd backend
+          cat > .env << EOF
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY || 'test-jwt-secret-key-for-ci' }}
+          SESSION_SECRET=${{ secrets.SESSION_SECRET || 'test-session-secret-for-ci' }}
+          AUTH_DB_HOST=localhost
+          AUTH_DB_PORT=5433
+          AUTH_DB_NAME=stack_builder_auth
+          AUTH_DB_USER=stack_builder
+          AUTH_DB_PASSWORD=test_password
+          DEBUG=False
+          EOF
+
+      - name: Run database migrations
+        run: |
+          cd backend
+          python migrations/001_create_initial_schema.py
+
+      - name: Start backend server in background
+        run: |
+          cd backend
+          nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
+          sleep 5
+
+      - name: Wait for backend to be ready
+        run: |
+          timeout 30 bash -c 'until curl -f http://localhost:8000/ 2>/dev/null; do sleep 1; done'
+
+      - name: Run authentication tests
+        run: |
+          python test_auth.py
+
+      - name: Run MFA tests
+        run: |
+          pip install pyotp
+          python test_mfa.py
+
+      - name: Stop backend server
+        if: always()
+        run: |
+          if [ -f /tmp/backend.pid ]; then
+            kill $(cat /tmp/backend.pid) || true
+          fi
+
+      - name: Upload backend logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-logs
+          path: /tmp/backend.log
+
+  code-quality:
+    name: Code Quality and Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install linting tools
+        run: |
+          pip install flake8 black isort mypy
+
+      - name: Run flake8
+        run: |
+          cd backend
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Check code formatting with black
+        run: |
+          cd backend
+          black --check --diff .
+
+      - name: Check import sorting with isort
+        run: |
+          cd backend
+          isort --check-only --diff .
+
+  security-checks:
+    name: Security Vulnerability Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install security tools
+        run: |
+          pip install bandit safety pip-audit
+
+      - name: Run Bandit security linter
+        run: |
+          cd backend
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -ll
+
+      - name: Check for known vulnerabilities with Safety
+        run: |
+          cd backend
+          safety check --json || true
+          safety check
+
+      - name: Run pip-audit for dependency vulnerabilities
+        run: |
+          cd backend
+          pip-audit --requirement requirements.txt || true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: backend/bandit-report.json
+
+  docker-build:
+    name: Docker Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend Docker image
+        run: |
+          if [ -f backend/Dockerfile ]; then
+            docker build -t ignition-stack-builder-backend:test backend/
+          else
+            echo "No backend Dockerfile found, skipping"
+          fi
+
+      - name: Build frontend Docker image
+        run: |
+          if [ -f frontend/Dockerfile ]; then
+            docker build -t ignition-stack-builder-frontend:test frontend/
+          else
+            echo "No frontend Dockerfile found, skipping"
+          fi
+
+      - name: Test docker-compose configuration
+        run: |
+          docker-compose config
+
+  configuration-validation:
+    name: Configuration and Schema Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: |
+          docker-compose config > /dev/null
+
+      - name: Check for secrets in code
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+      - name: Validate .gitignore
+        run: |
+          # Check that critical files are in .gitignore
+          grep -q ".env" .gitignore || (echo "ERROR: .env not in .gitignore" && exit 1)
+          grep -q "*.key" .gitignore || (echo "ERROR: *.key not in .gitignore" && exit 1)
+          grep -q "*.pem" .gitignore || (echo "ERROR: *.pem not in .gitignore" && exit 1)
+          echo ".gitignore validation passed"
+
+      - name: Check for TODO and FIXME comments
+        run: |
+          echo "Checking for TODO and FIXME comments..."
+          grep -r "TODO\|FIXME" --include="*.py" --include="*.js" --include="*.ts" backend/ frontend/ || echo "No TODOs or FIXMEs found"
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [backend-tests, code-quality, security-checks, docker-build, configuration-validation]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "CI Pipeline Results:"
+          echo "===================="
+          echo "Backend Tests: ${{ needs.backend-tests.result }}"
+          echo "Code Quality: ${{ needs.code-quality.result }}"
+          echo "Security Checks: ${{ needs.security-checks.result }}"
+          echo "Docker Build: ${{ needs.docker-build.result }}"
+          echo "Configuration Validation: ${{ needs.configuration-validation.result }}"
+
+      - name: Fail if any job failed
+        if: |
+          needs.backend-tests.result == 'failure' ||
+          needs.code-quality.result == 'failure' ||
+          needs.docker-build.result == 'failure' ||
+          needs.configuration-validation.result == 'failure'
+        run: exit 1

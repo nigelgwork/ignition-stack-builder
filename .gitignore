@@ -31,11 +31,27 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
 frontend/.env
 backend/.env
+**/.env
+
+# Secrets & Keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+jwt_secret*
+secrets/
+.secrets/
+frontend/ssl/
+**/ssl/
 
 # Docker
 *.log
+docker-compose.override.yml
 
 # Generated stacks
 generated-stacks/
@@ -51,5 +67,20 @@ htmlcov/
 *.cover
 tests/temp/
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+redis_data/
+dump.rdb
+
 # Claude settings
 .claude/settings.local.json
+
+# GitHub Actions
+.github/workflows/*.local.yml
+
+# Deployment
+deployment_keys/
+*.deploy

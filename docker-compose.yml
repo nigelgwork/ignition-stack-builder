@@ -1,16 +1,69 @@
 services:
+  # PostgreSQL database for authentication and user data
+  auth-db:
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    container_name: stack-builder-auth-db
+    ports:
+      - "${AUTH_DB_PORT:-5433}:5432"
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME:-stack_builder_auth}
+      POSTGRES_USER: ${AUTH_DB_USER:-stack_builder}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-changeme}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+      - ./backend/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - stack-builder-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER:-stack_builder} -d ${AUTH_DB_NAME:-stack_builder_auth}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for session/token cache
+  redis:
+    image: redis:${REDIS_VERSION:-7-alpine}
+    container_name: stack-builder-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - stack-builder-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: stack-builder-backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
       - ./scripts:/scripts:ro
     environment:
       - PYTHONUNBUFFERED=1
+      - AUTH_DB_HOST=auth-db
+      - AUTH_DB_PORT=5432
+      - AUTH_DB_NAME=${AUTH_DB_NAME:-stack_builder_auth}
+      - AUTH_DB_USER=${AUTH_DB_USER:-stack_builder}
+      - AUTH_DB_PASSWORD=${AUTH_DB_PASSWORD:-changeme}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - stack-builder-network
     restart: unless-stopped
@@ -21,7 +74,10 @@ services:
       dockerfile: Dockerfile
     container_name: stack-builder-frontend
     ports:
-      - "3500:80"
+      - "${FRONTEND_PORT:-3500}:80"
+      - "${FRONTEND_HTTPS_PORT:-3443}:443"
+    volumes:
+      - ./frontend/ssl:/etc/nginx/ssl:ro
     depends_on:
       - backend
     networks:
@@ -31,3 +87,9 @@ services:
 networks:
   stack-builder-network:
     driver: bridge
+
+volumes:
+  auth-db-data:
+    driver: local
+  redis-data:
+    driver: local

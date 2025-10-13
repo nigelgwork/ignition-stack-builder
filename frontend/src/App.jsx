@@ -6,7 +6,6 @@ import { downloadEncryptedConfig, importEncryptedConfig, validateConfigStructure
 const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 function App() {
-  const [darkMode, setDarkMode] = useState(true) // Default to dark mode
   const [catalog, setCatalog] = useState({ applications: [], categories: [] })
   const [selectedInstances, setSelectedInstances] = useState([])
   const [instanceCounter, setInstanceCounter] = useState({})
@@ -56,14 +55,6 @@ function App() {
   const [saveLoadSuccess, setSaveLoadSuccess] = useState('')
 
   useEffect(() => {
-    // Set dark mode by default
-    const savedTheme = localStorage.getItem('theme') || 'dark'
-    const isDark = savedTheme === 'dark'
-    setDarkMode(isDark)
-    if (isDark) {
-      document.documentElement.setAttribute('data-theme', 'dark')
-    }
-
     // Load catalog
     fetchCatalog()
   }, [])
@@ -97,18 +88,6 @@ function App() {
       console.error('Error fetching catalog:', error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const toggleDarkMode = () => {
-    const newMode = !darkMode
-    setDarkMode(newMode)
-    if (newMode) {
-      document.documentElement.setAttribute('data-theme', 'dark')
-      localStorage.setItem('theme', 'dark')
-    } else {
-      document.documentElement.removeAttribute('data-theme')
-      localStorage.setItem('theme', 'light')
     }
   }
 
@@ -954,22 +933,6 @@ function App() {
 
   return (
     <div className="app-container">
-      <header className="header">
-        <h1>Ignition Stack Builder</h1>
-        <div className="theme-toggle">
-          <span className="theme-toggle-label">☀️</span>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={darkMode}
-              onChange={toggleDarkMode}
-            />
-            <span className="toggle-slider round"></span>
-          </label>
-          <span className="theme-toggle-label">🌙</span>
-        </div>
-      </header>
-
       <main className="main-content">
         <div className="layout">
           <div className="catalog-section">
