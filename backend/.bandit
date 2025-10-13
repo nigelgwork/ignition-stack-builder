@@ -1,14 +1,10 @@
 [bandit]
-# Exclude test directories and migration scripts that contain example credentials
-exclude_dirs = /tests/,/test_,migrations/001_create_initial_schema.py
+# Exclude test directories
+exclude = /tests/,./migrations/
 
-# Skip specific tests
-skips = B105,B106,B107,B110,B404,B603,B607
+# Skip specific tests that are false positives in our context
+skips = B105,B106,B107
 
-# B105: Possible hardcoded password (false positives in config templates)
-# B106: Possible hardcoded password in function arguments
-# B107: Possible hardcoded password in function default
-# B110: Try/except pass (acceptable in some cases)
-# B404: Import of subprocess module (used safely)
-# B603: subprocess without shell=True (safe usage)
-# B607: Partial executable path (acceptable in our context)
+# B105: Possible hardcoded password (false positives in config generation templates)
+# B106: Possible hardcoded password in function arguments (config defaults)
+# B107: Possible hardcoded password in function default (config defaults)
