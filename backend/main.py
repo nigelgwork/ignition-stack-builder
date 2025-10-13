@@ -10,16 +10,11 @@ import logging
 import zipfile
 from typing import Any, Dict, List, Optional
 
-import yaml
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-
 # Import authentication and user management routers
 import auth_router
 import settings_router
 import stacks_router
+import yaml
 from config_generator import (generate_email_env_vars,
                               generate_grafana_datasources,
                               generate_mosquitto_config,
@@ -31,6 +26,9 @@ from config_generator import (generate_email_env_vars,
 from database import check_db_connection
 from docker_hub import (get_docker_tags, get_ignition_versions,
                         get_postgres_versions)
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from ignition_db_registration import (generate_ignition_db_readme_section,
                                       generate_ignition_db_registration_script,
                                       generate_requirements_file)
@@ -39,6 +37,7 @@ from keycloak_generator import (generate_keycloak_readme_section,
                                 generate_keycloak_realm)
 from ntfy_monitor import (generate_ntfy_monitor_script,
                           generate_ntfy_readme_section)
+from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

@@ -7,13 +7,12 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, field_serializer
-from sqlalchemy.orm import Session
-
 from auth_router import get_current_user
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from models import AuditLog, User, UserSettings
+from pydantic import BaseModel, field_serializer
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 

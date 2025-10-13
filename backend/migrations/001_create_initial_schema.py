@@ -36,7 +36,7 @@ def run_migration():
             port=db_port,
             database=db_name,
             user=db_user,
-            password=db_password
+            password=db_password,
         )
         conn.autocommit = True
         cursor = conn.cursor()
@@ -45,7 +45,7 @@ def run_migration():
         sql_file = Path(__file__).parent / "init.sql"
         print(f"Reading SQL migration from {sql_file}...")
 
-        with open(sql_file, 'r') as f:
+        with open(sql_file, "r") as f:
             sql_content = f.read()
 
         # Execute SQL migration

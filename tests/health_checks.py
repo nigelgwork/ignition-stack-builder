@@ -4,12 +4,14 @@ Health check utilities for IIoT Stack Builder testing
 Verifies that services are actually functional, not just running
 """
 
-import requests
-import subprocess
 import socket
+import subprocess
 import sys
 import time
-from typing import Tuple, Dict
+from typing import Dict, Tuple
+
+import requests
+
 
 class HealthChecker:
     """Service health verification"""
@@ -49,7 +51,9 @@ class HealthChecker:
         try:
             result = subprocess.run(
                 ["docker", "exec", container, "pg_isready"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if "accepting connections" in result.stdout:
                 return True, "Database accepting connections"
@@ -93,7 +97,9 @@ class HealthChecker:
         try:
             result = subprocess.run(
                 ["docker", "inspect", "--format={{.State.Status}}", container_name],
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             status = result.stdout.strip()
             if status == "running":
@@ -102,6 +108,7 @@ class HealthChecker:
         except Exception as e:
             return False, f"Container check failed: {str(e)}"
 
+
 def run_checks(service_type: str, container_name: str, config: Dict = None) -> Dict:
     """Run health checks for a specific service"""
     checker = HealthChecker()
@@ -109,12 +116,14 @@ def run_checks(service_type: str, container_name: str, config: Dict = None) -> D
         "service": service_type,
         "container": container_name,
         "checks": [],
-        "overall": False
+        "overall": False,
     }
 
     # Container running check (always)
     running, msg = checker.check_container_running(container_name)
-    results["checks"].append({"name": "Container Status", "passed": running, "message": msg})
+    results["checks"].append(
+        {"name": "Container Status", "passed": running, "message": msg}
+    )
 
     if not running:
         return results
@@ -123,30 +132,41 @@ def run_checks(service_type: str, container_name: str, config: Dict = None) -> D
     if service_type == "ignition":
         port = config.get("http_port", 8088) if config else 8088
         passed, msg = checker.check_ignition(port)
-        results["checks"].append({"name": "Ignition Gateway", "passed": passed, "message": msg})
+        results["checks"].append(
+            {"name": "Ignition Gateway", "passed": passed, "message": msg}
+        )
 
     elif service_type == "postgres":
         passed, msg = checker.check_postgres(container_name)
-        results["checks"].append({"name": "PostgreSQL Ready", "passed": passed, "message": msg})
+        results["checks"].append(
+            {"name": "PostgreSQL Ready", "passed": passed, "message": msg}
+        )
 
     elif service_type == "grafana":
         port = config.get("port", 3000) if config else 3000
         passed, msg = checker.check_grafana(port)
-        results["checks"].append({"name": "Grafana API", "passed": passed, "message": msg})
+        results["checks"].append(
+            {"name": "Grafana API", "passed": passed, "message": msg}
+        )
 
     elif service_type == "traefik":
         passed, msg = checker.check_traefik(8080)
-        results["checks"].append({"name": "Traefik API", "passed": passed, "message": msg})
+        results["checks"].append(
+            {"name": "Traefik API", "passed": passed, "message": msg}
+        )
 
     elif service_type == "keycloak":
         port = config.get("port", 8180) if config else 8180
         passed, msg = checker.check_keycloak(port)
-        results["checks"].append({"name": "Keycloak Health", "passed": passed, "message": msg})
+        results["checks"].append(
+            {"name": "Keycloak Health", "passed": passed, "message": msg}
+        )
 
     # Overall result
     results["overall"] = all(check["passed"] for check in results["checks"])
 
     return results
+
 
 if __name__ == "__main__":
     # Simple CLI for manual testing
