@@ -1,10 +1,10 @@
-name: Deploy to Production
+name: Build and Push Docker Images
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allow manual deployment trigger
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   build-and-push:
@@ -48,110 +48,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    environment:
-      name: production
-      url: https://ignitionvps.gaskony.me
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Create backup
-        run: |
-          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
-            cd /git/ignition-stack-builder
-            mkdir -p backups
-            docker compose exec -T auth-db pg_dump -U stack_builder stack_builder_auth > backups/backup_$(date +%Y%m%d_%H%M%S).sql
-            echo "Backup created"
-          EOF
-
-      - name: Deploy to production server
-        run: |
-          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
-            cd /git/ignition-stack-builder
-            git pull origin main
-
-            # Configure production ports in .env (standard HTTP/HTTPS ports)
-            if ! grep -q "FRONTEND_HTTPS_PORT" .env; then
-              echo "FRONTEND_HTTPS_PORT=443" >> .env
-            else
-              sed -i 's/FRONTEND_HTTPS_PORT=.*/FRONTEND_HTTPS_PORT=443/' .env
-            fi
-
-            if ! grep -q "FRONTEND_PORT=80" .env; then
-              sed -i 's/FRONTEND_PORT=.*/FRONTEND_PORT=80/' .env
-            fi
-
-            docker compose pull backend frontend
-            docker compose stop backend frontend
-            docker compose rm -f backend frontend
-            docker compose up -d backend frontend
-            sleep 5
-            docker compose exec -T backend python migrations/001_create_initial_schema.py || true
-            echo "Production deployment completed"
-          EOF
-
-      - name: Run health checks
-        run: |
-          sleep 15
-          curl -f https://ignitionvps.gaskony.me/ || exit 1
-          echo "Health check passed"
-
-      - name: Run smoke tests
-        run: |
-          # Test critical endpoints
-          curl -f https://ignitionvps.gaskony.me/ || exit 1
-          curl -f https://ignitionvps.gaskony.me/api/ || exit 1
-          echo "Smoke tests passed"
-
-      - name: Notify deployment success
+      - name: Notify build success
         if: success()
         run: |
-          echo "✅ Production deployment successful"
+          echo "✅ Docker images built and pushed successfully"
+          echo "Backend: gaskony/ignition-stack-builder-backend:latest"
+          echo "Frontend: gaskony/ignition-stack-builder-frontend:latest"
           echo "Version: ${{ github.sha }}"
-          echo "Deployed by: ${{ github.actor }}"
-          echo "Time: $(date)"
-
-      - name: Rollback on failure
-        if: failure()
-        run: |
-          echo "❌ Production deployment failed - initiating rollback"
-          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
-            cd /git/ignition-stack-builder
-            git reset --hard HEAD^
-            docker compose up -d
-          EOF
-          exit 1
-
-  cleanup:
-    name: Cleanup Old Resources
-    runs-on: ubuntu-latest
-    needs: deploy-production
-    if: success()
-
-    steps:
-      - name: Clean up old Docker images
-        run: |
-          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
-            docker image prune -a -f --filter "until=72h"
-            echo "Cleaned up Docker images older than 72 hours"
-          EOF
-
-      - name: Clean up old backups
-        run: |
-          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
-            cd /git/ignition-stack-builder/backups
-            find . -name "backup_*.sql" -mtime +7 -delete
-            echo "Cleaned up backups older than 7 days"
-          EOF
+          echo ""
+          echo "To deploy on any server, run:"
+          echo "  cd /git/ignition-stack-builder"
+          echo "  git pull origin main"
+          echo "  ./scripts/deploy.sh"
