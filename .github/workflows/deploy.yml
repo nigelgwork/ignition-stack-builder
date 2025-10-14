@@ -54,7 +54,7 @@ jobs:
     needs: build-and-push
     environment:
       name: production
-      url: http://156.67.214.53:3500
+      url: https://ignitionvps.gaskony.me
 
     steps:
       - name: Checkout code
@@ -90,14 +90,14 @@ jobs:
       - name: Run health checks
         run: |
           sleep 15
-          curl -f http://156.67.214.53:3500/ || exit 1
+          curl -f https://ignitionvps.gaskony.me/ || exit 1
           echo "Health check passed"
 
       - name: Run smoke tests
         run: |
           # Test critical endpoints
-          curl -f http://156.67.214.53:3500/ || exit 1
-          curl -f http://156.67.214.53:8000/ || exit 1
+          curl -f https://ignitionvps.gaskony.me/ || exit 1
+          curl -f https://ignitionvps.gaskony.me/api/ || exit 1
           echo "Smoke tests passed"
 
       - name: Notify deployment success
