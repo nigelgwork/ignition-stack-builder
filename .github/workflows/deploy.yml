@@ -81,6 +81,18 @@ jobs:
           ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
             cd /git/ignition-stack-builder
             git pull origin main
+
+            # Configure production ports in .env (standard HTTP/HTTPS ports)
+            if ! grep -q "FRONTEND_HTTPS_PORT" .env; then
+              echo "FRONTEND_HTTPS_PORT=443" >> .env
+            else
+              sed -i 's/FRONTEND_HTTPS_PORT=.*/FRONTEND_HTTPS_PORT=443/' .env
+            fi
+
+            if ! grep -q "FRONTEND_PORT=80" .env; then
+              sed -i 's/FRONTEND_PORT=.*/FRONTEND_PORT=80/' .env
+            fi
+
             docker compose pull backend frontend
             docker compose stop backend frontend
             docker compose rm -f backend frontend
