@@ -66,10 +66,16 @@ fi
 echo -e "${GREEN}✓ Settings configured${NC}"
 echo ""
 
-# Pull latest Docker images
+# Pull latest Docker images (or build if needed)
 echo -e "${YELLOW}Pulling latest Docker images...${NC}"
-docker compose pull backend frontend
-echo -e "${GREEN}✓ Images pulled${NC}"
+if docker compose pull backend frontend 2>/dev/null; then
+    echo -e "${GREEN}✓ Images pulled from Docker Hub${NC}"
+else
+    echo -e "${YELLOW}⚠ Could not pull images (may be ARM architecture)${NC}"
+    echo -e "${YELLOW}Building images locally instead...${NC}"
+    docker compose build backend frontend
+    echo -e "${GREEN}✓ Images built locally${NC}"
+fi
 echo ""
 
 # Stop and remove old containers
