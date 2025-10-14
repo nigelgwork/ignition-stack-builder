@@ -82,7 +82,10 @@ jobs:
             cd /git/ignition-stack-builder
             git pull origin main
             docker compose pull backend frontend
-            docker compose up -d --no-build backend frontend
+            docker compose stop backend frontend
+            docker compose rm -f backend frontend
+            docker compose up -d backend frontend
+            sleep 5
             docker compose exec -T backend python migrations/001_create_initial_schema.py || true
             echo "Production deployment completed"
           EOF
