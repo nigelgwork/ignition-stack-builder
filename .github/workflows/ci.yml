@@ -86,12 +86,12 @@ jobs:
 
       - name: Run authentication tests
         run: |
-          python test_auth.py
+          python tests/test_auth.py
 
       - name: Run MFA tests
         run: |
           pip install pyotp
-          python test_mfa.py
+          python tests/test_mfa.py
 
       - name: Stop backend server
         if: always()

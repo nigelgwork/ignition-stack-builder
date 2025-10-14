@@ -180,7 +180,7 @@ The `.env` file contains:
 
 2. **Generate SSL certificates for HTTPS**
    ```bash
-   ./generate-ssl-certs.sh
+   ./scripts/generate-ssl-certs.sh
    ```
    This creates self-signed certificates for secure local development. Your browser will show a security warning (click "Advanced" → "Proceed to localhost").
 

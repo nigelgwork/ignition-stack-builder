@@ -96,7 +96,7 @@ docker-compose down
 
 ```bash
 # Run backend API integration tests
-./run_backend_tests.sh
+./tests/run_backend_tests.sh
 
 # Run single test case (requires stack builder running on localhost:8000)
 ./tests/test_runner.sh tests/test_cases/T002_ignition_only.json
@@ -105,7 +105,7 @@ docker-compose down
 ./tests/test_runner.sh tests/test_cases/T302_full_iiot_stack.json 120
 
 # Run advanced test suite
-./run_advanced_tests.sh
+./tests/run_advanced_tests.sh
 ```
 
 ### Test Structure
@@ -301,22 +301,31 @@ ignition-stack-builder/
 │   └── src/
 │       ├── App.jsx         # Main application component
 │       └── App.css         # Styles with dark/light theme
-├── scripts/                # Installation scripts
+├── scripts/                # Utility scripts
 │   ├── install-docker-linux.sh
-│   └── install-docker-windows.ps1
+│   ├── install-docker-windows.ps1
+│   ├── generate-ssl-certs.sh
+│   ├── cleanup_for_github.sh
+│   └── do_cleanup.py
 ├── tests/                  # Testing infrastructure
 │   ├── test_runner.sh      # Main test execution script
+│   ├── run_backend_tests.sh    # Backend API test suite
+│   ├── run_advanced_tests.sh   # Full integration tests
+│   ├── test_auth.py        # Authentication tests
+│   ├── test_auth_api.sh    # Auth API test script
+│   ├── test_mfa.py         # MFA tests
 │   ├── test_cases/         # JSON test configurations
 │   ├── health_checks.py    # Service health validators
 │   ├── temp/               # Active test deployments
 │   └── results/            # Test output summaries
 ├── docs/                   # Documentation
+│   ├── AUTH_IMPLEMENTATION_SUMMARY.md
+│   ├── CHANGELOG.md
+│   ├── CRITICAL_BUG_FOUND.md
 │   ├── testing/            # Test reports
 │   ├── planning/           # Design documents
 │   └── guides/             # User guides
-├── docker-compose.yml      # Stack builder itself
-├── run_backend_tests.sh    # Backend API test suite
-└── run_advanced_tests.sh   # Full integration tests
+└── docker-compose.yml      # Stack builder itself
 ```
 
 ## Important Patterns
@@ -429,3 +438,55 @@ Workflow:
 3. Transfer entire bundle (including docker-images.tar.gz) to offline system
 4. Run load-images.sh on offline system
 5. Deploy with `docker compose up -d`
+
+## Repository Cleanup Guidelines
+
+When performing code cleanup or documentation updates, always follow these organization standards:
+
+### Automatic Cleanup Tasks
+
+1. **Remove Zone.Identifier files**: Always search for and remove `*.Zone.Identifier` files
+   ```bash
+   find . -name "*.Zone.Identifier" -type f -delete
+   ```
+
+2. **Organize files into appropriate folders**:
+   - **Documentation files** → `docs/`
+     - Planning documents → `docs/planning/`
+     - Test reports → `docs/testing/`
+     - User guides → `docs/guides/`
+   - **Test scripts** → `tests/`
+   - **Utility scripts** → `scripts/`
+
+3. **Update file references**: After moving files, update references in:
+   - `.github/workflows/` - CI/CD workflow files
+   - `README.md` - User-facing documentation
+   - `CLAUDE.md` - This file's command examples and file organization section
+   - Any scripts that reference moved files
+
+### Organization Standards
+
+**Keep the root directory clean** - Only these files should remain in the root:
+- `docker-compose.yml` - Stack builder service definition
+- `README.md` - Main project documentation
+- `CLAUDE.md` - Developer/AI guidance
+- `LICENSE` - Project license
+- `.env` / `.env.example` - Environment configuration
+- `.gitignore` - Git ignore rules
+- Configuration files (`.trufflehog.yml`, etc.)
+
+**Use descriptive folder names**:
+- `backend/` - Backend API code
+- `frontend/` - Frontend React application
+- `scripts/` - Utility and installation scripts
+- `tests/` - All testing infrastructure and test cases
+- `docs/` - All documentation (organized into subfolders)
+- `.github/` - GitHub-specific files (workflows, templates)
+- `.claude/` - Claude Code configuration
+
+### Best Practices
+
+- **Use git mv** when moving files to preserve history
+- **Test after reorganization** to ensure no broken references
+- **Update documentation** to reflect new file locations
+- **Be consistent** with folder structure across similar files
