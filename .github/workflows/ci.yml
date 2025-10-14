@@ -19,7 +19,7 @@ jobs:
           POSTGRES_USER: stack_builder
           POSTGRES_PASSWORD: test_password
         ports:
-          - 5433:5432
+          - 15433:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -29,7 +29,7 @@ jobs:
       redis:
         image: redis:7-alpine
         ports:
-          - 6379:6379
+          - 16379:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -61,7 +61,7 @@ jobs:
           JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY || 'test-jwt-secret-key-for-ci' }}
           SESSION_SECRET=${{ secrets.SESSION_SECRET || 'test-session-secret-for-ci' }}
           AUTH_DB_HOST=localhost
-          AUTH_DB_PORT=5433
+          AUTH_DB_PORT=15433
           AUTH_DB_NAME=stack_builder_auth
           AUTH_DB_USER=stack_builder
           AUTH_DB_PASSWORD=test_password
@@ -216,12 +216,12 @@ jobs:
           FRONTEND_PORT=3500
           FRONTEND_HTTPS_PORT=3443
           BACKEND_PORT=8000
-          AUTH_DB_PORT=5433
+          AUTH_DB_PORT=15433
           AUTH_DB_NAME=stack_builder_auth
           AUTH_DB_USER=stack_builder
           AUTH_DB_PASSWORD=test_password
           POSTGRES_VERSION=16-alpine
-          REDIS_PORT=6379
+          REDIS_PORT=16379
           REDIS_VERSION=7-alpine
           TZ=UTC
           EOF
@@ -245,12 +245,12 @@ jobs:
           FRONTEND_PORT=3500
           FRONTEND_HTTPS_PORT=3443
           BACKEND_PORT=8000
-          AUTH_DB_PORT=5433
+          AUTH_DB_PORT=15433
           AUTH_DB_NAME=stack_builder_auth
           AUTH_DB_USER=stack_builder
           AUTH_DB_PASSWORD=test_password
           POSTGRES_VERSION=16-alpine
-          REDIS_PORT=6379
+          REDIS_PORT=16379
           REDIS_VERSION=7-alpine
           TZ=UTC
           EOF
