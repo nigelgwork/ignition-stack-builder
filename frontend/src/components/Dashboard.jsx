@@ -9,6 +9,7 @@ function Dashboard() {
   const navigate = useNavigate()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
+  const [version, setVersion] = useState(null)
 
   useEffect(() => {
     // Set dark mode by default
@@ -18,6 +19,12 @@ function Dashboard() {
     if (isDark) {
       document.documentElement.setAttribute('data-theme', 'dark')
     }
+
+    // Load version info
+    fetch('/version.json')
+      .then(res => res.json())
+      .then(data => setVersion(data))
+      .catch(err => console.log('Could not load version:', err))
   }, [])
 
   const toggleDarkMode = () => {
@@ -43,6 +50,11 @@ function Dashboard() {
         <div className="nav-left">
           <h2>Ignition Stack Builder</h2>
           <span className="user-badge">Welcome, {user?.full_name || user?.email}</span>
+          {version && (
+            <span className="version-badge" title={`Build ${version.commitCount} • Branch: ${version.branch} • ${version.commitHash}`}>
+              {version.fullVersion}
+            </span>
+          )}
         </div>
 
         <div className="nav-right">

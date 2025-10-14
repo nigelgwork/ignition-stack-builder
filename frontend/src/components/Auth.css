@@ -265,6 +265,18 @@
   color: #818cf8;
 }
 
+.auth-footer .version-info {
+  color: #666666;
+  font-size: 12px;
+  margin-top: 12px;
+  opacity: 0.7;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+}
+
+[data-theme='light'] .auth-footer .version-info {
+  color: #999999;
+}
+
 /* Password visibility toggle */
 .password-input-wrapper {
   position: relative;

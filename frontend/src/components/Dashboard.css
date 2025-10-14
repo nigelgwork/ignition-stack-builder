@@ -43,6 +43,27 @@
   font-weight: 500;
 }
 
+.version-badge {
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  cursor: help;
+  transition: all 0.2s;
+}
+
+.version-badge:hover {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+[data-theme='light'] .version-badge {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
 .nav-right {
   display: flex;
   align-items: center;

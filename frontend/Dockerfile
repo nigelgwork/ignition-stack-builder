@@ -1,11 +1,18 @@
 FROM node:20-alpine as build
 
+# Install git for version generation
+RUN apk add --no-cache git
+
 WORKDIR /app
 
+# Copy package files and install dependencies
 COPY package*.json ./
 RUN npm install
 
+# Copy source code (including .git for version info)
 COPY . .
+
+# Generate version and build
 RUN npm run build
 
 FROM nginx:alpine

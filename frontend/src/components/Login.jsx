@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import './Auth.css'
@@ -10,9 +10,18 @@ function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [version, setVersion] = useState(null)
 
   const { login, verifyMfa, mfaRequired } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    // Load version info
+    fetch('/version.json')
+      .then(res => res.json())
+      .then(data => setVersion(data))
+      .catch(err => console.log('Could not load version:', err))
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -81,6 +90,11 @@ function Login() {
 
           <div className="auth-footer">
             <p>Lost access to your authenticator? Contact support.</p>
+            {version && (
+              <p className="version-info">
+                {version.fullVersion} • {version.commitDate}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -142,6 +156,11 @@ function Login() {
           <p>
             Don't have an account? <Link to="/register">Sign up</Link>
           </p>
+          {version && (
+            <p className="version-info">
+              {version.fullVersion} • {version.commitDate}
+            </p>
+          )}
         </div>
       </div>
     </div>
