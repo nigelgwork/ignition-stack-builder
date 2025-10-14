@@ -4,7 +4,7 @@ services:
     image: postgres:${POSTGRES_VERSION:-16-alpine}
     container_name: stack-builder-auth-db
     ports:
-      - "${AUTH_DB_PORT:-5433}:5432"
+      - "${AUTH_DB_PORT:-15433}:5432"
     environment:
       POSTGRES_DB: ${AUTH_DB_NAME:-stack_builder_auth}
       POSTGRES_USER: ${AUTH_DB_USER:-stack_builder}
@@ -27,7 +27,7 @@ services:
     image: redis:${REDIS_VERSION:-7-alpine}
     container_name: stack-builder-redis
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-16379}:6379"
     command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
